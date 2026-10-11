@@ -4,6 +4,7 @@ import { readAuthStatus, SIGNED_OUT } from "./claude/auth.ts";
 import { readClaudeVersions, type ClaudeVersions } from "./claude/versions.ts";
 import { ConversationStore } from "./conversations.ts";
 import { OperatorStore } from "./operators.ts";
+import { ScheduleStore } from "./schedules.ts";
 import { CapabilityCache } from "./claude/capabilities.ts";
 import { ModelCatalog } from "./claude/models.ts";
 import { ContextTrackers, type ContextStanding } from "./claude/contextTracker.ts";
@@ -43,6 +44,8 @@ export interface Bridge {
   // Attachment folders of turns that are still waiting or running, which the sweep leaves alone.
   heldAttachments: Set<string>;
   outbox: OutboxDelivery;
+  // The tasks each conversation scheduled with Claude Code's own tools, sent by the bridge when they fall due.
+  schedules: ScheduleStore;
   flow: TurnFlow;
   // How full a conversation was at its last turn; null until one has run since the bridge started.
   contextOf: (sessionId: string) => ContextStanding | null;
@@ -95,6 +98,8 @@ export async function createBridge(config: Config, supervised: boolean): Promise
   const trackers = new ContextTrackers();
   const trail = new TrailChoice(path.join(config.dataDir, "trail.json"));
   await trail.load();
+  const schedules = new ScheduleStore(path.join(config.dataDir, "schedules.json"));
+  await schedules.load();
 
   return {
     config,
@@ -119,6 +124,7 @@ export async function createBridge(config: Config, supervised: boolean): Promise
     updates,
     updateNotice,
     outbox,
+    schedules,
     flow: new TurnFlow(
       capabilities,
       (sessionId) => trackers.trackerFor(sessionId),

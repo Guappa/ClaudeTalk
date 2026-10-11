@@ -864,6 +864,38 @@ is not handed to the branch. What this conversation missed outside Discord is
 still announced here, not in the branch, and the branch does not count the
 history it was born with as missed.
 
+### Scheduling it
+
+Claude Code's own scheduling works here as it does in a terminal that is left
+open: `/loop 30m check the deploy`, "remind me at 3pm to push the release
+branch", or Claude using its `CronCreate` tool in the middle of a task. The
+bridge keeps each task a turn schedules and, when it falls due, sends its
+prompt into the conversation as a turn of its own. A line in the channel says
+which task it is, the prompt runs exactly as written, and its questions,
+approval requests and answer mention whoever owns the conversation, since
+nobody is there to have sent it. A task that falls due while a turn is running
+waits behind it, as it would in the terminal.
+
+The rules are Claude Code's: times are in the host's local time zone, a
+recurring task stops a week after it was made, after one last run, and a
+one-time task runs once. Asking Claude to list or cancel a task ("what
+scheduled tasks do I have?", "cancel the deploy check") changes what the bridge
+sends too. Nothing runs between fires: no Claude Code process is kept waiting,
+and a due task costs a turn like any message.
+
+Limits, each stated so it is not mistaken for a fault:
+
+- Only tasks a turn run from Discord schedules are kept. One made in a terminal
+  session fires there while that session stays open, and not here.
+- A run that fell due while the bridge was not running is skipped, not caught
+  up, as a terminal that was closed would skip it.
+- A self-pacing `/loop` with no interval, where Claude picks each wait itself,
+  does not carry on past the turn that started it; give it an interval.
+- A task runs on the minute it names, without the few minutes of spread Claude
+  Code adds to recurring tasks to stagger its traffic.
+- `/clear`, `/unbind` and a deleted channel end the conversation's tasks with
+  it. A task a subagent schedules belongs to the subagent and is not kept.
+
 ## Compaction and context
 
 Compaction starting replaces the status line with a notice that counts elapsed
@@ -999,6 +1031,7 @@ the language it started in, so its trail does not change tongue halfway.
 | `data/conversations.json` | Channel bindings, members, per-conversation settings, and which conversations were started from a tag |
 | `data/operators.json` | Who an owner made an operator |
 | `data/language.json` | The language picked with `/language`. Absent until someone picks one |
+| `data/schedules.json` | Tasks conversations scheduled with Claude Code's own tools, and when each next falls due. Absent until a turn schedules one; lost, the tasks are lost as a closed terminal loses them |
 | `data/trail.json` | The kinds of tool call the trail leaves out by default, set with `/trail everywhere:True`. Absent until an owner sets one |
 | `data/bridge.lock` | Prevents a second instance. Delete only if you are sure nothing is running |
 | `data/update.json` | The newer version an owner was last told of, and when, so it is said once and at most weekly |

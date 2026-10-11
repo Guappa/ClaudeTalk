@@ -16,6 +16,11 @@ export class Attention {
     this.lastSeen = this.now();
   }
 
+  // A turn nobody started, a scheduled one, has nobody watching it from the outset.
+  unseen(): void {
+    this.lastSeen = Number.NEGATIVE_INFINITY;
+  }
+
   away(): boolean {
     return this.afterMs > 0 && this.now() - this.lastSeen >= this.afterMs;
   }

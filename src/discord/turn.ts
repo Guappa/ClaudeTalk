@@ -3,12 +3,15 @@ import type { Conversation } from "../conversations.ts";
 import type { MessageSink } from "./messageSink.ts";
 import type { SessionRecord } from "../sessions/index.ts";
 import type { TurnOptions } from "./turnFlow.ts";
+import type { ClaudeEvent } from "../claude/events.ts";
 import { markCaughtUp, newDrift } from "./sync.ts";
 import { describeDrift } from "./transcriptView.ts";
+import { ScheduleReader } from "../claude/scheduledTasks.ts";
+import { errorMessage } from "../text.ts";
 
 // What a turn is given, and what of it goes to the flow as it is.
 export interface ConversationTurn
-  extends Pick<TurnOptions, "name" | "fork" | "onSessionId" | "onState" | "asked" | "foldable" | "images"> {
+  extends Pick<TurnOptions, "name" | "fork" | "onSessionId" | "onState" | "asked" | "foldable" | "images" | "unattended"> {
   prompt: string;
   sink: MessageSink;
   // Called when the turn is refused over something `/takeover` can free, so whoever sent it need not send it again.
@@ -37,6 +40,8 @@ export async function runConversationTurn(bridge: Bridge, conversation: Conversa
     asked: turn.asked,
     foldable: turn.foldable,
     images: turn.images,
+    unattended: turn.unattended,
+    onEvent: turn.fork ? undefined : scheduleKeeper(bridge, conversation.sessionId),
     // Judged once the turn ahead has ended and been marked seen, or its own lines would count as drift.
     beforeTurn: async () => {
       // A message can read the channel's conversation and then wait on a download or a lookup while the channel is started over or unbound under it.
@@ -52,6 +57,18 @@ export async function runConversationTurn(bridge: Bridge, conversation: Conversa
       if (!turn.fork) await markCaughtUp(bridge, conversation);
     },
   });
+}
+
+// What the turn schedules, cancels or lists with Claude Code's own tools is kept for the bridge to send when due; a branch's first turn writes to another conversation, so it keeps none here.
+function scheduleKeeper(bridge: Bridge, sessionId: string): (event: ClaudeEvent) => void {
+  const reader = new ScheduleReader();
+  return (event) => {
+    const changes = reader.read(event);
+    if (changes.length === 0) return;
+    void bridge.schedules.apply(sessionId, changes).catch((error: unknown) => {
+      console.error(`The scheduled tasks of ${sessionId} could not be saved: ${errorMessage(error)}`);
+    });
+  };
 }
 
 // The turn marks the conversation seen when it ends, which would take this drift with it, so it is kept as owed until /sync has shown it.

@@ -5,6 +5,7 @@ import { markInterrupted } from "./activeTurns.ts";
 import { bridgeCommandDefinitions } from "./commands/registry.ts";
 import { inviteUrl } from "./invite.ts";
 import { watchOutboxes } from "./outboxWatcher.ts";
+import { watchSchedules } from "./scheduleWatcher.ts";
 import { announceRestart } from "./restart.ts";
 
 async function registerCommands(bridge: Bridge, client: Client<true>): Promise<boolean> {
@@ -55,7 +56,7 @@ async function forgetDeletedChannels(bridge: Bridge, client: Client<true>): Prom
 }
 
 // Each step stands alone: commands that could not be registered are no reason to leave interrupted turns unmarked or the outboxes unwatched.
-export async function startUp(bridge: Bridge, client: Client<true>): Promise<NodeJS.Timeout> {
+export async function startUp(bridge: Bridge, client: Client<true>): Promise<NodeJS.Timeout[]> {
   const present = client.guilds.cache.has(bridge.config.guildId);
   if (!present) sayHowToJoin(bridge, client);
   const registered = present && (await registerCommands(bridge, client));
@@ -66,7 +67,7 @@ export async function startUp(bridge: Bridge, client: Client<true>): Promise<Nod
   await announceRestart(client, await bridge.restartNote.take(), bridge.build, bridge.language.say);
   // Asked ahead of the first /model, which has no time to wait for the answer.
   void bridge.models.refresh();
-  const watching = watchOutboxes(bridge, client);
+  const watching = [watchOutboxes(bridge, client), watchSchedules(bridge, client)];
   const ready = `Ready as ${client.user.tag} on v${bridge.build}.`;
   if (registered) console.log(`${ready} Commands registered to guild ${bridge.config.guildId}.`);
   else if (present) console.log(`${ready} Commands are NOT registered; see above.`);

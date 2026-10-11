@@ -99,6 +99,10 @@ export interface TurnOptions {
   foldable?: boolean;
   // Images sent with the message, shown to the model with it whether it starts a turn or joins one.
   images?: PromptImage[];
+  // Sent by the bridge on nobody's message, so its answer reaches whoever owns the conversation however long it takes.
+  unattended?: boolean;
+  // Every event the turn's stream carries, for whoever keeps state the stream changes.
+  onEvent?: (event: ClaudeEvent) => void;
 }
 
 // A message handed to a running turn: where it stands, and the notice that offers to hurry it.
@@ -465,6 +469,7 @@ export class TurnFlow {
     }
     // Counted from when the message was sent, not from when its turn came up: the wait behind another turn is time away too.
     const attention = new Attention(this.config.pingAfterMs);
+    if (options.unattended) attention.unseen();
     // The place in the lane is taken before anything is awaited, so whatever arrives or is dropped meanwhile counts this message too.
     const announced = Promise.withResolvers<void>();
     let refused = false;
@@ -705,6 +710,7 @@ export class TurnFlow {
       },
       (event) => {
         calls.observe(event);
+        options.onEvent?.(event);
         const noteCompaction = (): void => {
           compaction.happened = true;
         };

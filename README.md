@@ -33,7 +33,8 @@ Claude Code's own transcript, so nothing here owns it.
 | Live trail | What Claude is doing as it does it: commands, edits, searches, and a line per agent with how it ended. `/trail` hides the kinds you do not want, for one conversation or for all. |
 | Question menus | Claude's questions arrive as select menus with the choices it offered and a field for your own words. |
 | Stop and steer | A **Stop** button ends a turn. A message sent while one runs is handed to it and taken up at its next step, or at once with **Send now**. |
-| Pings | A mention when a long turn finishes, fails or needs you, and only if you have been away. |
+| Pings | A question or approval request always pings, headed so it stands out; a long turn's answer or failure pings only if you have been away. |
+| Scheduled tasks | `/loop`, reminders and Claude's own scheduled tasks run as they would in an open terminal: the bridge sends each prompt into the conversation when it falls due, with no process kept waiting in between. |
 | Files both ways | Attach files to a message; an image is shown to Claude with your words, with no tool call spent on reading it. Claude sends files back by writing them to a folder. |
 | Claude Code's commands | Skills, plugin commands and Claude Code's own slash commands, through `/run` and `/skills`. |
 | Plugins and MCP servers | `/plugins` toggles a plugin. `/mcp` shows what each MCP server is doing and switches one off or on, or reconnects it. |

@@ -317,6 +317,22 @@ describe("a channel sink asked to reach the person", () => {
     expect(sent[2]!.content).toBe("Plain?");
   });
 
+  // A scheduled turn has no message of its owner's to reply to, so a mention is how it reaches them; it never costs the message any of its text.
+  it("leads a notifying post with a mention of whoever is to be told, or sends the mention just before a message too full for it", async () => {
+    const { fake, sent } = capturing("scheduled");
+    const sink = channelSink(fake.channel, { notifyUserIds: ["100000000000000001"] });
+    await sink.send("quiet progress");
+    await sink.ask!("May I?", [], { notify: true });
+    const full = "x".repeat(1990);
+    await sink.send(full, { notify: true });
+
+    expect(sent[0]!.content).toBe("quiet progress");
+    expect(sent[1]!.content).toBe("<@100000000000000001> May I?");
+    expect(sent[2]!.content).toBe("<@100000000000000001>");
+    expect(sent[3]!.content).toBe(full);
+    expect((sent[1]!.allowedMentions as { users?: string[] }).users).toContain("100000000000000001");
+  });
+
   // A turn a command started has no message of the person's to reply to, and a reply is the only ping there is.
   it("posts plainly when no message started the turn", async () => {
     const { fake, sent } = capturing("nobody");

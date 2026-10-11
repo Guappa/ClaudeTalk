@@ -284,6 +284,9 @@ export const en = {
     stale: "That request is already answered, expired, or from before a restart.",
     ownersOnly: "Only an owner of this bridge can answer a permission request.",
   },
+  schedules: {
+    due: "**Scheduled task `{{id}}` is due:** {{prompt}}",
+  },
   attention: {
     waiting: "Waiting for your answer",
   },

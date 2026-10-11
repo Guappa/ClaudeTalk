@@ -30,6 +30,8 @@ export interface SinkOptions {
   replyToMessageId?: string;
   // Shared across sinks, keyed by channel, so a message posted by another sink still counts as beneath the trail.
   latestPosts?: Map<string, string>;
+  // Who is told when the turn calls for attention and no message of theirs started it to reply to.
+  notifyUserIds?: string[];
 }
 
 // Discord allows five buttons to a row, and nothing here offers more than three.
@@ -85,7 +87,9 @@ function closable(sent: Message, shown: string): AskHandle {
 
 // The channel reads in time order: the trail message is edited only while nothing lasting sits beneath it.
 export function channelSink(channel: SendableChannels, options: SinkOptions = {}): MessageSink {
-  const allowedMentions = mentionPolicy(options.allowedUserIds ?? []);
+  const notified = options.notifyUserIds ?? [];
+  const allowedMentions = mentionPolicy([...(options.allowedUserIds ?? []), ...notified]);
+  const mentionLine = notified.map((userId) => `<@${userId}>`).join(" ");
   let owned: Message | null = null;
   const latestPosts = options.latestPosts ?? new Map<string, string>();
 
@@ -115,10 +119,23 @@ export function channelSink(channel: SendableChannels, options: SinkOptions = {}
     return sent;
   };
 
+  // A mention is the only ping a turn nobody's message started can give; it leads the message, or goes just before it when the message has no room left for it.
+  const postNotifying = async (payload: MessageCreateOptions, delivery?: Delivery): Promise<Message> => {
+    if (!delivery?.notify || !mentionLine) return await post(payload);
+    const content = typeof payload.content === "string" ? payload.content : "";
+    if (content.length + mentionLine.length + 1 <= DISCORD_MESSAGE_LIMIT)
+      return await post({ ...payload, content: `${mentionLine} ${content}` });
+    await post({ content: mentionLine, allowedMentions });
+    return await post(payload);
+  };
+
   return {
     async send(text: string, delivery?: Delivery): Promise<void> {
       const shown = forDiscord(text);
-      const sent = await post(addressed(owned ? { content: shown, allowedMentions } : firstSendOptions(shown), delivery));
+      const sent = await postNotifying(
+        addressed(owned ? { content: shown, allowedMentions } : firstSendOptions(shown), delivery),
+        delivery,
+      );
       owned ??= sent;
     },
     async edit(text: string, actions: SinkAction[] = []): Promise<void> {
@@ -157,14 +174,17 @@ export function channelSink(channel: SendableChannels, options: SinkOptions = {}
     },
     async ask(text: string, actions: SinkAction[], delivery?: Delivery): Promise<AskHandle> {
       const shown = forDiscord(headed(text, delivery));
-      const sent = await post(addressed({ content: shown, allowedMentions, components: buttonRow(actions) }, delivery));
+      const sent = await postNotifying(
+        addressed({ content: shown, allowedMentions, components: buttonRow(actions) }, delivery),
+        delivery,
+      );
       return closable(sent, shown);
     },
     // Five rows to a message: the tool asks at most four questions, and the buttons take the fifth.
     async askWithMenus(text: string, menus: SinkMenu[], actions: SinkAction[], delivery?: Delivery): Promise<AskHandle> {
       const shown = forDiscord(headed(text, delivery));
       const components: AnyRow[] = [...menus.slice(0, 4).map(menuRow), ...buttonRow(actions)];
-      const sent = await post(addressed({ content: shown, allowedMentions, components }, delivery));
+      const sent = await postNotifying(addressed({ content: shown, allowedMentions, components }, delivery), delivery);
       return closable(sent, shown);
     },
     // Refused where Discord has no threads, or the bot may not create one; the caller then does without.
