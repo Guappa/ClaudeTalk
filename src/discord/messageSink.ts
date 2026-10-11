@@ -48,6 +48,8 @@ export interface DetailSink {
 // Told as well as shown: the transport calls for the attention of whoever the turn is working for.
 export interface Delivery {
   notify?: boolean;
+  // A line that says, before anything else, that the turn is waiting on whoever reads it.
+  heading?: string;
 }
 
 // The only way a turn talks back to Discord, so a different transport can be dropped in behind it.

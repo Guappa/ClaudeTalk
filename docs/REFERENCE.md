@@ -304,7 +304,8 @@ included unless asked for:
 | `/ask context:30` | Plus the last 30 messages | What you chose, capped at 50 |
 
 Replies use Discord's reply, threaded to the prompting message and not pinging,
-except to reach someone who has been away from the turn: see
+except for a question or an approval request, and to reach someone who has been
+away from the turn: see
 [Being told when it needs you](#being-told-when-it-needs-you).
 Context names each speaker by id and the model is told not to tag whoever it is
 answering; it may only ping ids that appeared in its context, and `@everyone`,
@@ -340,7 +341,7 @@ on. Five are refused outright, and the model is told why so it can ask you
 instead. The other two are put to an owner: a recursive delete reaching outside
 the working directory, and a file written outside it by a file tool. The
 command or the file is shown in the channel with **Approve once** and **Deny**,
-pinging if you are away, and it is denied after five minutes with no answer. It
+pinging you, and it is denied after five minutes with no answer. It
 is asked one call at a time, whatever the rest of the turn was approved for,
 because a turn can make a folder anywhere and a rule that only refused would
 leave it unable to remove what it made, or to write the one file a task needs
@@ -705,11 +706,18 @@ nothing else.
 
 ### Being told when it needs you
 
-Nothing a turn posts pings, with one exception: a turn you have been away from.
-Once `PING_AFTER_SECONDS` have passed since you last acted on it, two minutes
-unless set otherwise, the next thing that needs you is sent as a reply to the
-message that started the turn, with the ping on. That is its answer, the reason
-it failed, a question Claude asks, or an approval request.
+A question Claude asks and an approval request always ping, because the turn
+stands still until someone answers. Each is sent as a reply to the message that
+started the turn, with the ping on, and opens with a heading line, behind the
+same mark the reaction shows while the turn waits, so it reads apart from the
+trail above it. While it is open the trail keeps to its own message above it
+rather than continuing beneath, so the prompt stays the newest message in the
+channel; once it is answered, the trail carries on below it.
+
+Nothing else a turn posts pings, with one exception: a turn you have been away
+from. Once `PING_AFTER_SECONDS` have passed since you last acted on it, two
+minutes unless set otherwise, its answer or the reason it failed is sent the
+same way, as a reply with the ping on.
 
 Acting on a turn is sending the message that starts it, handing it another
 while it runs, and answering, skipping, approving or denying one of its

@@ -287,6 +287,9 @@ export const sv: Catalog = {
     stale: "Den förfrågan är redan besvarad, har gått ut, eller är från före en omstart.",
     ownersOnly: "Bara en ägare av den här bryggan kan svara på en behörighetsförfrågan.",
   },
+  attention: {
+    waiting: "Väntar på ditt svar",
+  },
   questions: {
     heading_one: "Claude har en fråga.",
     heading_other: "Claude har {{count}} frågor.",
