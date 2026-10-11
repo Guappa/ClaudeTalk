@@ -8,12 +8,17 @@ import { nextFire, parseCron } from "../src/claude/cron.ts";
 import { ScheduleReader } from "../src/claude/scheduledTasks.ts";
 import { ScheduleStore } from "../src/schedules.ts";
 import { fakeChannel } from "./helpers/discord.ts";
-import { testBridge } from "./helpers/bridge.ts";
+import { OWNER, testBridge } from "./helpers/bridge.ts";
+import type { MessageSink } from "../src/discord/messageSink.ts";
 
-const ran = vi.hoisted(() => [] as Array<{ prompt: string; unattended?: boolean }>);
+const ran = vi.hoisted(() => [] as Array<{ prompt: string; unattended?: boolean; sink: MessageSink }>);
 vi.mock("../src/discord/turn.ts", () => ({
-  runConversationTurn: async (_bridge: unknown, _conversation: unknown, turn: { prompt: string; unattended?: boolean }) => {
-    ran.push({ prompt: turn.prompt, unattended: turn.unattended });
+  runConversationTurn: async (
+    _bridge: unknown,
+    _conversation: unknown,
+    turn: { prompt: string; unattended?: boolean; sink: MessageSink },
+  ) => {
+    ran.push({ prompt: turn.prompt, unattended: turn.unattended, sink: turn.sink });
     return true;
   },
 }));
@@ -232,8 +237,25 @@ describe("fireDueTasks", () => {
 
     expect(fake.posted[0]).toContain("t-due");
     expect(fake.posted[0]).toContain("prompt t-due");
-    expect(ran[0]).toEqual({ prompt: "prompt t-due", unattended: true });
+    expect(ran[0]).toMatchObject({ prompt: "prompt t-due", unattended: true });
     expect(bridge.schedules.of("s-due")).toEqual([]);
+  });
+
+  // A conversation bound before owners were recorded has none; its scheduled turn reaches the bridge's owners instead of mentioning nobody.
+  it("mentions the bridge's owners when the conversation records no owner of its own", async () => {
+    ran.length = 0;
+    const bridge = await testBridge();
+    await bridge.store.bindNew({ sessionId: "s-old", cwd: bridge.config.projectsRoot, channelId: "chan-old", ownerId: "" });
+    const made = new Date(Date.now() - 10 * 60_000);
+    await bridge.schedules.apply("s-old", [created("t-old", "* * * * *", false, made)], made);
+    const fake = fakeChannel("chan-old");
+
+    await fireDueTasks(bridge, clientWith({ "chan-old": fake.channel }));
+    await vi.waitFor(() => expect(ran).toHaveLength(1));
+    await ran[0]!.sink.send("the answer", { notify: true });
+
+    expect(fake.posted.at(-1)).toBe(`<@${OWNER}> the answer`);
+    expect(fake.posted.join("\n")).not.toContain("<@>");
   });
 
   it("forgets the tasks of a conversation that is no longer bound", async () => {
