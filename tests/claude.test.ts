@@ -1117,6 +1117,11 @@ describe("bridge system note", () => {
   it("asks for the progress remarks the activity log is built to show", () => {
     expect(bridgeSystemNote("s1")).toMatch(/think out loud/i);
   });
+
+  // The bridge sends a scheduled task's prompt after the turn that made it ends, so the model must not warn that the task dies with the session.
+  it("says a scheduled task outlives the turn that made it", () => {
+    expect(bridgeSystemNote("s1")).toMatch(/scheduled task .* still fires after this turn/i);
+  });
 });
 
 describe("the message limit reaches the model", () => {

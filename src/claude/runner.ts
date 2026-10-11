@@ -68,6 +68,7 @@ export function bridgeSystemNote(sessionId: string): string {
     "expected, say so in a sentence. Those remarks show live while the turn runs and are the only",
     "sign of progress the reader gets, so silence reads as a hang.",
     "This conversation may also be open in a terminal here.",
+    "A scheduled task (CronCreate, /loop) still fires after this turn.",
   ].join(" ");
 }
 
