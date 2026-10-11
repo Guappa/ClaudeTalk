@@ -11,6 +11,7 @@ import {
 import type { AskHandle, Delivery, DetailSink, MessageSink, SinkAction, SinkAnchor, SinkFile, SinkMenu } from "./messageSink.ts";
 import { truncate } from "../text.ts";
 import { sendNotice } from "./notice.ts";
+import { STATE_EMOJI } from "./reactions.ts";
 import { forDiscord, nameForDiscord } from "./outgoing.ts";
 import { DISCORD_MESSAGE_LIMIT, MENU_OPTION_CHARS, MENU_PLACEHOLDER_CHARS } from "./limits.ts";
 
@@ -65,6 +66,11 @@ function menuRow(menu: SinkMenu): ActionRowBuilder<StringSelectMenuBuilder> {
 }
 
 type AnyRow = ActionRowBuilder<ButtonBuilder> | ActionRowBuilder<StringSelectMenuBuilder>;
+
+// Drawn as a heading, the largest text a message can carry, behind the mark the reaction shows while a turn waits on a person, so a prompt stands out from the trail above it.
+function headed(text: string, delivery?: Delivery): string {
+  return delivery?.heading ? `### ${STATE_EMOJI.waiting} ${delivery.heading}\n${text}` : text;
+}
 
 // The outcome is cut to what the message has room for: an edit over the limit is refused, and the controls would then stay live on a prompt already settled.
 function closable(sent: Message, shown: string): AskHandle {
@@ -150,13 +156,13 @@ export function channelSink(channel: SendableChannels, options: SinkOptions = {}
       return anchor;
     },
     async ask(text: string, actions: SinkAction[], delivery?: Delivery): Promise<AskHandle> {
-      const shown = forDiscord(text);
+      const shown = forDiscord(headed(text, delivery));
       const sent = await post(addressed({ content: shown, allowedMentions, components: buttonRow(actions) }, delivery));
       return closable(sent, shown);
     },
     // Five rows to a message: the tool asks at most four questions, and the buttons take the fifth.
     async askWithMenus(text: string, menus: SinkMenu[], actions: SinkAction[], delivery?: Delivery): Promise<AskHandle> {
-      const shown = forDiscord(text);
+      const shown = forDiscord(headed(text, delivery));
       const components: AnyRow[] = [...menus.slice(0, 4).map(menuRow), ...buttonRow(actions)];
       const sent = await post(addressed({ content: shown, allowedMentions, components }, delivery));
       return closable(sent, shown);

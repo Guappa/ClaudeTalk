@@ -1192,23 +1192,26 @@ describe("TurnFlow", () => {
       expect(never.away()).toBe(false);
     });
 
-    // A prompt that timed out was answered by nobody, so the turn's end still has someone to reach.
-    it("asks with a ping only once they are away, and takes only an answer a person gave as their being back", async () => {
+    // A turn stands still until it is answered, so an ask pings even someone who is watching; a prompt that timed out was answered by nobody, so the turn's end still has someone to reach.
+    it("asks with a ping and a heading every time, and takes only an answer a person gave as their being back", async () => {
       const clock = { now: 0 };
       const attention = new Attention(1000, () => clock.now);
-      const asked: Array<boolean | undefined> = [];
-      const ask = async (delivery: { notify?: boolean }): Promise<string> => {
-        asked.push(delivery.notify);
+      const asked: Array<{ notify?: boolean; heading?: string }> = [];
+      const ask = async (delivery: { notify?: boolean; heading?: string }): Promise<string> => {
+        asked.push(delivery);
         return "expired";
       };
 
-      await attention.calling(ask, () => false);
+      await attention.calling(ask, () => false, "Waiting for your answer");
       clock.now = 2000;
-      await attention.calling(ask, () => false);
-      expect(asked).toEqual([false, true]);
+      await attention.calling(ask, () => false, "Waiting for your answer");
+      expect(asked).toEqual([
+        { notify: true, heading: "Waiting for your answer" },
+        { notify: true, heading: "Waiting for your answer" },
+      ]);
       expect(attention.away()).toBe(true);
 
-      await attention.calling(ask, () => true);
+      await attention.calling(ask, () => true, "Waiting for your answer");
       expect(attention.away()).toBe(false);
     });
   });

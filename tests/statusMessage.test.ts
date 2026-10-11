@@ -144,6 +144,30 @@ describe("StatusMessage", () => {
     expect(sink.messages[1]).toContain("After three.");
   });
 
+  // A prompt waiting on a person has to stay the newest message, so the trail keeps to its own message above it and carries on beneath only once it is settled.
+  it("keeps editing in place above an open ask, and moves beneath it once the ask is settled", async () => {
+    const sink = recordingSink();
+    const status = new StatusMessage(say, sink, () => 0);
+    await status.start();
+    status.note("Before the ask.");
+
+    await status.whileAsking(async () => {
+      sink.othersBelow = true;
+      status.note("The call being asked about.");
+      await status.flush();
+      expect(sink.messages).toHaveLength(1);
+    });
+
+    status.note("After the ask.");
+    await status.settle();
+
+    expect(sink.messages).toHaveLength(2);
+    expect(sink.messages[0]).toContain("Before the ask.");
+    expect(sink.messages[0]).toContain("The call being asked about.");
+    expect(sink.messages[1]).toContain("After the ask.");
+    expect(sink.messages[1]).not.toContain("The call being asked about.");
+  });
+
   it("leaves a plain marker, not a live heading, when it moves before any remark was made", async () => {
     const sink = recordingSink();
     const status = new StatusMessage(say, sink, () => 0);

@@ -284,6 +284,9 @@ export const en = {
     stale: "That request is already answered, expired, or from before a restart.",
     ownersOnly: "Only an owner of this bridge can answer a permission request.",
   },
+  attention: {
+    waiting: "Waiting for your answer",
+  },
   questions: {
     heading_one: "Claude has a question.",
     heading_other: "Claude has {{count}} questions.",

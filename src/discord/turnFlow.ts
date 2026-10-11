@@ -50,6 +50,9 @@ import type { StateMarker } from "./reactions.ts";
 import type { Mood } from "./statusMessage.ts";
 import type { ActiveTurns } from "./activeTurns.ts";
 import { Attention } from "./attention.ts";
+
+// Every call on the person runs through one door, so each holds the trail above it and arrives headed and pinged.
+type CallOnPerson = <T>(ask: (delivery: Delivery) => Promise<T>, byPerson: (answer: T) => boolean) => Promise<T>;
 import { APPROVAL_REFUSED, QUESTIONS_UNANSWERED } from "../claude/prompts.ts";
 import type { QuestionOutcome } from "../claude/questions.ts";
 
@@ -670,6 +673,8 @@ export class TurnFlow {
   // The part of a turn during which Claude Code runs, and the posting of what it came to.
   private async live(scope: TurnScope): Promise<void> {
     const { sessionId, cwd, prompt, settings, sink, options, resume, say, status, board, tracker, attention } = scope;
+    const callOnPerson: CallOnPerson = (ask, byPerson) =>
+      status.whileAsking(() => attention.calling(ask, byPerson, say("attention.waiting")));
     // True once Claude Code's process has ended, which is before the answer is posted and the turn is cleared away.
     let over = false;
     const stillRunning = (): boolean => !over;
@@ -688,14 +693,14 @@ export class TurnFlow {
         resume,
         name: options.name,
         fork: options.fork,
-        approve: this.approvalGate(say, sessionId, sink, stillRunning, attention, options.onState),
+        approve: this.approvalGate(say, sessionId, sink, stillRunning, callOnPerson, options.onState),
         deny: this.denialGate(cwd, sink),
-        ask: this.ownerGate(say, sessionId, cwd, sink, stillRunning, attention, options.onState),
+        ask: this.ownerGate(say, sessionId, cwd, sink, stillRunning, callOnPerson, options.onState),
         maxTurns: this.config.maxTurns ?? undefined,
         onRetry: () => status.note(say("trail.retryingRefresh")),
         askQuestions: (questions) =>
           whileWaiting(options.onState, stillRunning, () =>
-            attention.calling((delivery) => this.questions.ask(say, sessionId, sink, questions, delivery), answeredByPerson),
+            callOnPerson((delivery) => this.questions.ask(say, sessionId, sink, questions, delivery), answeredByPerson),
           ),
       },
       (event) => {
@@ -779,7 +784,7 @@ export class TurnFlow {
     cwd: string,
     sink: MessageSink,
     stillRunning: () => boolean,
-    attention: Attention,
+    callOnPerson: CallOnPerson,
     onState?: StateMarker,
   ): TurnRequest["ask"] {
     if (!sink.ask) return undefined;
@@ -788,7 +793,7 @@ export class TurnFlow {
       const asked = askedOfOwner(this.config.toolDenials, scope, toolName, input);
       if (!asked) return null;
       return whileWaiting(onState, stillRunning, () =>
-        attention.calling(
+        callOnPerson(
           (delivery) => this.approvals.askOfOwner(say, sessionId, sink, this.config.ownerIds, asked, delivery),
           decidedByPerson,
         ),
@@ -801,7 +806,7 @@ export class TurnFlow {
     sessionId: string,
     sink: MessageSink,
     stillRunning: () => boolean,
-    attention: Attention,
+    callOnPerson: CallOnPerson,
     onState?: StateMarker,
   ): ApproveTool | undefined {
     if (!this.config.toolApprovals) return undefined;
@@ -811,9 +816,7 @@ export class TurnFlow {
     return (toolName, input) =>
       this.approvals.covers(sessionId)
         ? ask(toolName, input)
-        : whileWaiting(onState, stillRunning, () =>
-            attention.calling((delivery) => ask(toolName, input, delivery), decidedByPerson),
-          );
+        : whileWaiting(onState, stillRunning, () => callOnPerson((delivery) => ask(toolName, input, delivery), decidedByPerson));
   }
 
   private recordSpend(sessionId: string, result: TurnResult, options: TurnOptions, resume: boolean): void {

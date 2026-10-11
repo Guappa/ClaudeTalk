@@ -409,7 +409,8 @@ nowhere else, so that a limit Discord changes is one edit. A bare `2000` or
 **Emoji appear in exactly four places, each from a fixed set.** The reaction
 on the message that started a turn, and the heading of the progress message,
 each carrying the turn's state: queued, running, waiting on a person, done,
-stopped, failed. The line that says an agent has come back, behind a
+stopped, failed; the waiting mark also heads a question or an approval
+request. The line that says an agent has come back, behind a
 circle coloured by how it ended, as the terminal draws one; a circle and not
 the turn's tick, which there would read as the turn itself being over. And a
 mark in front of each tool call's line in the trail, one per tool (a book for a

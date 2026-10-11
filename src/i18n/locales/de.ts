@@ -294,6 +294,9 @@ export const de: Catalog = {
     stale: "Diese Anfrage ist schon beantwortet, abgelaufen oder von vor einem Neustart.",
     ownersOnly: "Nur ein Besitzer dieser Brücke kann eine Berechtigungsanfrage beantworten.",
   },
+  attention: {
+    waiting: "Wartet auf deine Antwort",
+  },
   questions: {
     heading_one: "Claude hat eine Frage.",
     heading_other: "Claude hat {{count}} Fragen.",

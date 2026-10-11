@@ -247,7 +247,7 @@ cp .env.example .env
 | `CLAUDE_BIN` | Optional, path to the `claude` the bridge asks for listings and sign-in. Without it, the one on PATH; without that, the build the Agent SDK ships |
 | `CLAUDE_TOOL_APPROVALS` | Optional, `true` by default: an owner is asked in Discord before each command, file edit or web fetch. `false` runs every turn without asking |
 | `TOOL_DENIALS` | Optional, all seven rules by default. What a turn is refused outright, or has to ask an owner for, approvals on or off: `deletes`, `writes`, `force-push`, `secrets`, `keys`, `download-run`, `machine`, or `none`. `.env.example` says what each refuses |
-| `PING_AFTER_SECONDS` | Optional, `120` by default. How long you may have been away from a turn before its answer, a failure, a question or an approval request pings you. `0` never pings |
+| `PING_AFTER_SECONDS` | Optional, `120` by default. How long you may have been away from a turn before its answer or a failure pings you. A question or an approval request always pings. `0` never pings an answer |
 | `CLAUDE_MAX_TURNS` | Optional, unset by default. How many times one turn may go back to the model before Claude Code stops it. A stopped turn loses nothing, and the next message carries on from it. Unset, a turn runs as long as it needs |
 | `UPDATE_CHECK` | Optional, `true` by default. Once a day the bridge reads this repository's tags on GitHub and says when a newer version is out: in its log, in `/whoami`, and to an owner in Discord at most once a week. It installs nothing. `false` makes no such request |
 | `BRIDGE_LANGUAGE` | Optional, `en` by default. The language the bridge itself speaks: `en`, `de`, `es`, `fr`, `sv` or `zh`. `/language` changes it from Discord. Claude's answers are not affected |

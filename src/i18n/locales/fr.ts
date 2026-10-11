@@ -287,6 +287,9 @@ export const fr: Catalog = {
     stale: "Cette demande a déjà reçu sa réponse, a expiré, ou date d'avant un redémarrage.",
     ownersOnly: "Seul un propriétaire de cette passerelle peut répondre à une demande de permission.",
   },
+  attention: {
+    waiting: "En attente de ta réponse",
+  },
   questions: {
     heading_one: "Claude a une question.",
     heading_other: "Claude a {{count}} questions.",

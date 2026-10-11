@@ -272,6 +272,7 @@ describe("a channel sink whose message is gone", () => {
 
 describe("a channel sink asked to reach the person", () => {
   interface Sent {
+    content?: string;
     reply?: { messageReference: string };
     allowedMentions?: { repliedUser?: boolean };
   }
@@ -301,6 +302,19 @@ describe("a channel sink asked to reach the person", () => {
       expect(reaching.allowedMentions!.repliedUser).toBe(true);
     }
     expect(sent[3]!.reply).toBeUndefined();
+  });
+
+  // A prompt reads apart from the trail above it: its heading comes first, behind the mark the reaction shows while the turn waits.
+  it("opens a prompt with its heading as a heading line, and draws a prompt without one as it is", async () => {
+    const { fake, sent } = capturing("headed");
+    const sink = channelSink(fake.channel, { replyToMessageId: "prompt-1" });
+    await sink.ask!("May I?", [], { notify: true, heading: "Waiting for your answer" });
+    await sink.askWithMenus!("Which one?", [], [], { notify: true, heading: "Waiting for your answer" });
+    await sink.ask!("Plain?", []);
+
+    expect(sent[0]!.content).toBe("### ❓ Waiting for your answer\nMay I?");
+    expect(sent[1]!.content).toBe("### ❓ Waiting for your answer\nWhich one?");
+    expect(sent[2]!.content).toBe("Plain?");
   });
 
   // A turn a command started has no message of the person's to reply to, and a reply is the only ping there is.

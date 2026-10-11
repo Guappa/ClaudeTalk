@@ -154,6 +154,7 @@ export class StatusMessage {
   private startedAt = 0;
   private stopped = false;
   private moving = false;
+  private asking = 0;
   private live: LiveMood = "working";
   private readonly say: Say;
   private readonly sink: MessageSink;
@@ -213,7 +214,7 @@ export class StatusMessage {
 
   private addNote(piece: string, origin: number): void {
     // While a move is still queued the sink reads as buried; the remarks meanwhile belong to that new message.
-    const buried = this.sink.continueIn !== undefined && !this.moving && this.sink.isLatest?.() === false;
+    const buried = this.sink.continueIn !== undefined && !this.moving && this.asking === 0 && this.sink.isLatest?.() === false;
     if (buried) this.rollOver(this.notes);
     this.notes.push(piece);
     this.origins.push(origin);
@@ -226,7 +227,7 @@ export class StatusMessage {
 
   // Whatever no longer fits under the heading is sealed the moment it is said, the newest remark included: the channel reads in order, and nothing waits for the turn to end to be shown whole.
   private rollOverOverflow(): void {
-    if (!this.sink.continueIn) return;
+    if (!this.sink.continueIn || this.asking > 0) return;
     const elapsed = this.now() - this.startedAt;
     while (this.notes.length > 0 && !fitsInOne(this.say, this.notes, elapsed, this.steps, this.extra())) {
       this.rollOver(this.oldestThatFit());
@@ -244,6 +245,16 @@ export class StatusMessage {
     }
     if (sealed.length < this.notes.length) return sealed;
     return this.notes.length > 1 ? this.notes.slice(0, -1) : this.notes;
+  }
+
+  // An open question or approval has to stay the newest message, so the trail keeps to its own message above it until the ask is settled, and carries on beneath it afterwards.
+  async whileAsking<T>(ask: () => Promise<T>): Promise<T> {
+    this.asking += 1;
+    try {
+      return await ask();
+    } finally {
+      this.asking -= 1;
+    }
   }
 
   // A status Claude Code repeats every few seconds should read as one line, not a growing column.
