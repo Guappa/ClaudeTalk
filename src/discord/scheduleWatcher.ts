@@ -12,6 +12,11 @@ const CHECK_MS = 30_000;
 // The prompt is whole in the transcript; the channel needs enough of it to tell one task from another.
 const SHOWN_PROMPT_CHARS = 200;
 
+// A conversation bound before owners were recorded has none, and its scheduled turn would otherwise mention nobody and wait out every approval.
+function whoToTell(bridge: Bridge, conversation: Conversation): string[] {
+  return conversation.ownerId ? [conversation.ownerId] : bridge.config.ownerIds;
+}
+
 // A due task's prompt goes to its conversation as a turn of its own, as a terminal kept open would run it: queued behind a turn already running, and answered in the channel.
 async function sendDue(
   bridge: Bridge,
@@ -29,7 +34,7 @@ async function sendDue(
     prompt: task.prompt,
     sink: channelSink(channel, {
       replyToMessageId: announced.id,
-      notifyUserIds: [conversation.ownerId],
+      notifyUserIds: whoToTell(bridge, conversation),
       latestPosts: bridge.latestPosts,
     }),
     unattended: true,
@@ -54,10 +59,18 @@ export async function fireDueTasks(bridge: Bridge, client: Client): Promise<void
 }
 
 export function watchSchedules(bridge: Bridge, client: Client): NodeJS.Timeout {
+  // A check held up by a slow channel must not overlap the next, which would find the same task still due.
+  let checking = false;
   const timer = setInterval(() => {
-    void fireDueTasks(bridge, client).catch((error: unknown) => {
-      console.error(`Scheduled tasks could not be checked: ${errorMessage(error)}`);
-    });
+    if (checking) return;
+    checking = true;
+    void fireDueTasks(bridge, client)
+      .catch((error: unknown) => {
+        console.error(`Scheduled tasks could not be checked: ${errorMessage(error)}`);
+      })
+      .finally(() => {
+        checking = false;
+      });
   }, CHECK_MS);
   timer.unref();
   return timer;

@@ -87,7 +87,7 @@ function closable(sent: Message, shown: string): AskHandle {
 
 // The channel reads in time order: the trail message is edited only while nothing lasting sits beneath it.
 export function channelSink(channel: SendableChannels, options: SinkOptions = {}): MessageSink {
-  const notified = options.notifyUserIds ?? [];
+  const notified = (options.notifyUserIds ?? []).filter(Boolean);
   const allowedMentions = mentionPolicy([...(options.allowedUserIds ?? []), ...notified]);
   const mentionLine = notified.map((userId) => `<@${userId}>`).join(" ");
   let owned: Message | null = null;
