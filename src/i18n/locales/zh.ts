@@ -264,6 +264,9 @@ export const zh: Catalog = {
     stale: "该请求已被回答、已过期，或来自重启之前。",
     ownersOnly: "只有此桥接的所有者可以回答权限请求。",
   },
+  schedules: {
+    due: "**计划任务 `{{id}}` 到时间了：** {{prompt}}",
+  },
   attention: {
     waiting: "等待你的回复",
   },

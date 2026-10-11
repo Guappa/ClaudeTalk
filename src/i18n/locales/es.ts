@@ -288,6 +288,9 @@ export const es: Catalog = {
     stale: "Esa solicitud ya está respondida, ha caducado o es de antes de un reinicio.",
     ownersOnly: "Solo un propietario de este puente puede responder a una solicitud de permiso.",
   },
+  schedules: {
+    due: "**Tarea programada `{{id}}`, toca ahora:** {{prompt}}",
+  },
   attention: {
     waiting: "Esperando tu respuesta",
   },

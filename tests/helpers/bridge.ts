@@ -18,6 +18,7 @@ import { TurnFlow } from "../../src/discord/turnFlow.ts";
 import { TrailChoice } from "../../src/discord/trailChoice.ts";
 import { LanguageChoice } from "../../src/i18n/languageChoice.ts";
 import { OperatorStore } from "../../src/operators.ts";
+import { ScheduleStore } from "../../src/schedules.ts";
 import { UpdateCheck } from "../../src/updateCheck.ts";
 import { RestartNote } from "../../src/discord/restart.ts";
 import { UpdateNotice } from "../../src/discord/updateNotice.ts";
@@ -101,6 +102,7 @@ export async function testBridge(records: SessionRecord[] = [], config: Partial<
     restartNote: new RestartNote(path.join(dir, "restart.json")),
     checkBoot: async () => ({ ok: true }),
     outbox,
+    schedules: new ScheduleStore(path.join(dir, "schedules.json")),
     flow: new TurnFlow(
       capabilities,
       (sessionId) => trackers.trackerFor(sessionId),

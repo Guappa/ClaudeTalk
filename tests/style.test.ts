@@ -159,7 +159,9 @@ describe("docs follow code", () => {
   it("spends a turn from only the places that are gated", () => {
     const callers = basenames(files.filter((file) => /runConversationTurn\(/.test(fs.readFileSync(file, "utf8")))).sort();
 
-    expect(callers).toEqual(["ask.ts", "clear.ts", "conversations.ts", "fork.ts", "message.ts", "run.ts", "turn.ts"].sort());
+    expect(callers).toEqual(
+      ["ask.ts", "clear.ts", "conversations.ts", "fork.ts", "message.ts", "run.ts", "scheduleWatcher.ts", "turn.ts"].sort(),
+    );
   });
 
   it("lists every environment variable in .env.example and the README", () => {

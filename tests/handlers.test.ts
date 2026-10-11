@@ -456,8 +456,7 @@ describe("starting up", () => {
       return { id };
     };
 
-    const watching = await startUp(bridge, client(refused, fetch));
-    clearInterval(watching);
+    for (const watching of await startUp(bridge, client(refused, fetch))) clearInterval(watching);
 
     expect(leftovers).toHaveBeenCalledOnce();
     expect(bridge.store.bySession(SESSION)).toBeUndefined();
@@ -471,7 +470,7 @@ describe("starting up", () => {
     const register = vi.fn(async (): Promise<void> => undefined);
     const outside = client(register, async (id) => ({ id }), []);
 
-    clearInterval(await startUp(bridge, outside));
+    for (const watching of await startUp(bridge, outside)) clearInterval(watching);
     expect(register).not.toHaveBeenCalled();
     expect(said.mock.calls.flat().join("\n")).toContain(`not in server ${GUILD} yet`);
     expect(said.mock.calls.flat().join("\n")).toContain(LINK);

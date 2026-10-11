@@ -287,6 +287,9 @@ export const sv: Catalog = {
     stale: "Den förfrågan är redan besvarad, har gått ut, eller är från före en omstart.",
     ownersOnly: "Bara en ägare av den här bryggan kan svara på en behörighetsförfrågan.",
   },
+  schedules: {
+    due: "**Schemalagd uppgift `{{id}}` ska köras:** {{prompt}}",
+  },
   attention: {
     waiting: "Väntar på ditt svar",
   },
