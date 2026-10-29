@@ -217,6 +217,8 @@ export const de: Catalog = {
     runningWith_one: "Ein Durchlauf läuft, mit {{count}} Nachricht dahinter in der Warteschlange.",
     runningWith_other: "Ein Durchlauf läuft, mit {{count}} Nachrichten dahinter in der Warteschlange.",
     full: "Dieses Gespräch hält schon {{limit}} Nachrichten: Eine läuft und {{queued}} stehen dahinter an. Lass es aufholen, führ `/stop` aus, um die laufende zu beenden und die nächste starten zu lassen, oder `/stop all:true`, um die Warteschlange gleich mit zu verwerfen.",
+    started: "Aus der Warteschlange: Sein Durchlauf hat begonnen.",
+    dropped: "Durch einen Stopp aus der Warteschlange genommen.",
   },
   restart: {
     unsupervised:

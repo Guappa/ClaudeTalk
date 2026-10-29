@@ -41,6 +41,7 @@ import type { AskHandle, Delivery, MessageSink, SinkAction } from "./messageSink
 import { StatusMessage } from "./statusMessage.ts";
 import { splitForDiscord } from "./outgoing.ts";
 import { displayPath } from "../displayPath.ts";
+import { randomUUID } from "node:crypto";
 import { setTimeout as wait } from "node:timers/promises";
 import { errorMessage, shownError } from "../text.ts";
 import { outboxRelative } from "../outboxFolder.ts";
@@ -114,6 +115,14 @@ interface Folded {
   // Set when the turn ended with the message still waiting, so a notice that arrives after that is closed at once.
   missed: boolean;
   settled: PromiseWithResolvers<void>;
+}
+
+// A message waiting in the lane behind another turn, and the notice that offers to take it back.
+interface Queued {
+  onState?: StateMarker;
+  notice: AskHandle | null;
+  // Set when it is taken back while its notice is still on its way, so the notice is closed once it lands.
+  withdrawn: boolean;
 }
 
 // What one turn carries from its set-up into its run: where it is, what it was asked, and what it shows through.
@@ -322,6 +331,7 @@ export class TurnFlow {
   // How long the person each running turn works for has been away from it.
   private readonly attention = new Map<string, Attention>();
   private readonly folded = new Map<string, Map<string, Folded>>();
+  private readonly queued = new Map<string, Map<string, Queued>>();
   private readonly queue = new TurnQueue();
   private readonly capabilities: CapabilityCache;
   private readonly trackerFor: (sessionId: string) => ContextTracker;
@@ -486,31 +496,69 @@ export class TurnFlow {
     if (options.unattended) attention.unseen();
     // The place in the lane is taken before anything is awaited, so whatever arrives or is dropped meanwhile counts this message too.
     const announced = Promise.withResolvers<void>();
+    const ticketId = randomUUID();
     let refused = false;
-    const running = this.queue.enqueue(sessionId, async () => {
-      await announced.promise;
-      this.settingUp.add(sessionId);
-      try {
-        const refusal = await this.check(say, sessionId, options);
-        refused = refusal !== undefined;
-        if (refusal === undefined) await this.runNow(sessionId, cwd, prompt, settings, sink, options, attention);
-        else await this.refuse(sink, refusal, options);
-      } finally {
-        // Cleared before the hook that follows: a stop that lands while the turn is only being marked as seen has nothing to stop, and must not end the next turn.
-        this.settingUp.delete(sessionId);
-        this.stopping.delete(sessionId);
-        await options.afterTurn?.();
-      }
-    });
+    const running = this.queue.enqueue(
+      sessionId,
+      async () => {
+        await announced.promise;
+        await this.takeQueued(sessionId, ticketId)?.notice?.close(say("queue.started"));
+        this.settingUp.add(sessionId);
+        try {
+          const refusal = await this.check(say, sessionId, options);
+          refused = refusal !== undefined;
+          if (refusal === undefined) await this.runNow(sessionId, cwd, prompt, settings, sink, options, attention);
+          else await this.refuse(sink, refusal, options);
+        } finally {
+          // Cleared before the hook that follows: a stop that lands while the turn is only being marked as seen has nothing to stop, and must not end the next turn.
+          this.settingUp.delete(sessionId);
+          this.stopping.delete(sessionId);
+          await options.afterTurn?.();
+        }
+      },
+      ticketId,
+    );
     if (admission.kind === "queued") {
-      await sink.notice(describeQueued(say, admission.ahead)).catch(() => undefined);
       await options.onState?.("queued");
+      await this.announceQueued(sessionId, ticketId, admission.ahead, sink, options.onState);
     }
     announced.resolve();
 
     const ran = await running;
+    // Dropped from the lane by a stop rather than taken back, so nothing has said it will not run.
+    if (!ran) await this.takeQueued(sessionId, ticketId)?.notice?.close(say("queue.dropped"));
     if (!ran) await options.onState?.("stopped");
     return ran && !refused;
+  }
+
+  private async announceQueued(
+    sessionId: string,
+    ticketId: string,
+    ahead: number,
+    sink: MessageSink,
+    onState?: StateMarker,
+  ): Promise<void> {
+    const say = this.say();
+    const entry: Queued = { notice: null, onState, withdrawn: false };
+    const waiting = this.queued.get(sessionId) ?? new Map<string, Queued>();
+    waiting.set(ticketId, entry);
+    this.queued.set(sessionId, waiting);
+    const text = describeQueued(say, ahead);
+    if (!sink.ask) {
+      await sink.notice(text).catch(() => undefined);
+      return;
+    }
+    const takeBack = [{ id: takeBackActionId(sessionId, ticketId), label: say("fold.takeBack"), tone: "danger" as const }];
+    entry.notice = await sink.ask(text, takeBack).catch(() => null);
+    if (entry.withdrawn) await entry.notice?.close(say("fold.takenBack"));
+  }
+
+  private takeQueued(sessionId: string, ticketId: string): Queued | undefined {
+    const waiting = this.queued.get(sessionId);
+    const entry = waiting?.get(ticketId);
+    waiting?.delete(ticketId);
+    if (waiting?.size === 0) this.queued.delete(sessionId);
+    return entry;
   }
 
   // A check that failed is not a turn that ran: left to reject, the message kept its clock for good and nobody was told why.
@@ -591,6 +639,15 @@ export class TurnFlow {
 
   // A message taken back ends as one that was never sent: its notice says so and its own turn settles with nothing taken.
   async takeBack(sessionId: string, uuid: string): Promise<TakeBackOutcome> {
+    const queued = this.queue.withdraw(sessionId, uuid);
+    if (queued === "started") return "taken";
+    if (queued === "withdrawn") {
+      const waiting = this.takeQueued(sessionId, uuid);
+      if (waiting) waiting.withdrawn = true;
+      await waiting?.notice?.close(this.sayFor(sessionId)("fold.takenBack"));
+      await waiting?.onState?.("stopped");
+      return "withdrawn";
+    }
     const entry = this.folded.get(sessionId)?.get(uuid);
     const turn = this.running.get(sessionId);
     if (!entry || !turn) return "gone";

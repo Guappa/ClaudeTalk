@@ -470,6 +470,123 @@ describe("TurnFlow", () => {
     await running;
   });
 
+  // A message that queues rather than joining the turn, a slash command or one sent before the turn is under way, can be taken back too.
+  it("takes back a message queued behind the running turn, so it never runs", async () => {
+    const flow = makeFlow();
+    const letEnd = keepRunning("first errand");
+    const running = flow.run("s42", cwd, "first errand", {}, recordingSink(), { resume: true });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const states: string[] = [];
+    const asked: Array<{ text: string; ids: string[] }> = [];
+    const closed: string[] = [];
+    const sink = {
+      ...quietSink(),
+      ask: async (text: string, actions: Array<{ id: string }>) => {
+        asked.push({ text, ids: actions.map((action) => action.id) });
+        return { close: async (outcome: string) => void closed.push(outcome) };
+      },
+    };
+    const queued = flow.run("s42", cwd, "/never-mind", {}, sink, {
+      resume: true,
+      onState: async (state) => void states.push(state),
+    });
+    await vi.waitFor(() => expect(asked).toHaveLength(1));
+    expect(asked[0]!.text).toContain("Queued behind the turn still running");
+    const ticket = /^turn:takeback:s42:(.+)$/.exec(asked[0]!.ids[0]!)?.[1];
+
+    expect(await flow.takeBack("s42", ticket!)).toBe("withdrawn");
+    expect(closed).toEqual(["Taken back. Claude never saw it."]);
+    letEnd();
+    await running;
+    expect(await queued).toBe(false);
+    expect(started).not.toContain("/never-mind");
+    // The marker sets a reaction once however often it is told, so only the order of distinct states shows.
+    expect([...new Set(states)]).toEqual(["queued", "stopped"]);
+  });
+
+  // The button can be pressed in the moment between the notice posting and the bridge holding its handle.
+  it("closes a queued notice that lands after its message was already taken back", async () => {
+    const flow = makeFlow();
+    const letEnd = keepRunning("slow ahead");
+    const running = flow.run("s44", cwd, "slow ahead", {}, recordingSink(), { resume: true });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    let ticket = "";
+    const posted = Promise.withResolvers<void>();
+    const closed: string[] = [];
+    const sink = {
+      ...quietSink(),
+      ask: async (_text: string, actions: Array<{ id: string }>) => {
+        ticket = actions[0]!.id.split(":").at(-1)!;
+        await posted.promise;
+        return { close: async (outcome: string) => void closed.push(outcome) };
+      },
+    };
+    const queued = flow.run("s44", cwd, "/early", {}, sink, { resume: true });
+    await vi.waitFor(() => expect(ticket).not.toBe(""));
+
+    expect(await flow.takeBack("s44", ticket)).toBe("withdrawn");
+    posted.resolve();
+    await vi.waitFor(() => expect(closed).toEqual(["Taken back. Claude never saw it."]));
+    letEnd();
+    await running;
+    expect(await queued).toBe(false);
+  });
+
+  it("says a queued message was dropped when a stop clears the queue, rather than asking for it again", async () => {
+    const flow = makeFlow();
+    const letEnd = keepRunning("long ahead");
+    const running = flow.run("s45", cwd, "long ahead", {}, recordingSink(), { resume: true });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const closed: string[] = [];
+    let asked = false;
+    const sink = {
+      ...quietSink(),
+      ask: async () => {
+        asked = true;
+        return { close: async (outcome: string) => void closed.push(outcome) };
+      },
+    };
+    const queued = flow.run("s45", cwd, "/dropped", {}, sink, { resume: true });
+    await vi.waitFor(() => expect(asked).toBe(true));
+
+    flow.stop("s45");
+    letEnd();
+    await running;
+    expect(await queued).toBe(false);
+    expect(closed).toEqual(["Dropped from the queue by a stop."]);
+  });
+
+  it("closes a queued message's notice when its turn starts, after which it is too late to take back", async () => {
+    const flow = makeFlow();
+    const letEnd = keepRunning("ahead of it");
+    const running = flow.run("s43", cwd, "ahead of it", {}, recordingSink(), { resume: true });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    let ticket = "";
+    const closed: string[] = [];
+    const sink = {
+      ...quietSink(),
+      ask: async (_text: string, actions: Array<{ id: string }>) => {
+        ticket = actions[0]!.id.split(":").at(-1)!;
+        return { close: async (outcome: string) => void closed.push(outcome) };
+      },
+    };
+    const letSecondEnd = keepRunning("/second");
+    const queued = flow.run("s43", cwd, "/second", {}, sink, { resume: true });
+    await vi.waitFor(() => expect(ticket).not.toBe(""));
+    letEnd();
+    await running;
+    await vi.waitFor(() => expect(started).toContain("/second"));
+
+    expect(closed).toEqual(["Out of the queue: its turn has started."]);
+    expect(await flow.takeBack("s43", ticket)).toBe("taken");
+    letSecondEnd();
+    expect(await queued).toBe(true);
+  });
+
   it("says it is too late once the session has the message in a step, and leaves it waiting to be taken up", async () => {
     const flow = makeFlow();
     unwithdrawable.add("busy errand");

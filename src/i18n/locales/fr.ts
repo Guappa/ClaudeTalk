@@ -210,6 +210,8 @@ export const fr: Catalog = {
     runningWith_one: "Un tour est en cours, avec {{count}} message en file derrière lui.",
     runningWith_other: "Un tour est en cours, avec {{count}} messages en file derrière lui.",
     full: "Cette conversation tient déjà {{limit}} messages : un en cours et {{queued}} en file derrière. Laisse-la rattraper son retard, lance `/stop` pour finir celui en vol et laisser partir le suivant, ou `/stop all:true` pour écarter la file avec.",
+    started: "Sorti de la file : son tour a commencé.",
+    dropped: "Retiré de la file par un arrêt.",
   },
   restart: {
     unsupervised:

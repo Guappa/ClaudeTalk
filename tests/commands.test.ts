@@ -593,6 +593,27 @@ describe("turn queue", () => {
     expect(queue.depth("s1")).toBe(0);
   });
 
+  // Taking back a waiting message skips it when its place comes up; one already started is past taking back.
+  it("withdraws only the waiting message it names, and none that has started", async () => {
+    const queue = new TurnQueue();
+    const running = Promise.withResolvers<void>();
+    const order: string[] = [];
+    const first = queue.enqueue("s1", () => running.promise, "first");
+    const second = queue.enqueue("s1", async () => void order.push("second"), "second");
+    const third = queue.enqueue("s1", async () => void order.push("third"), "third");
+    await wait(1);
+
+    expect(queue.withdraw("s1", "first")).toBe("started");
+    expect(queue.withdraw("s1", "second")).toBe("withdrawn");
+    expect(queue.withdraw("s1", "second")).toBeNull();
+    expect(queue.withdraw("s1", "nobody")).toBeNull();
+    expect(queue.depth("s1")).toBe(2);
+
+    running.resolve();
+    expect(await Promise.all([first, second, third])).toEqual([true, false, true]);
+    expect(order).toEqual(["third"]);
+  });
+
   it("queues rather than dropping a message sent mid-turn", async () => {
     const queue = new TurnQueue();
     const order: string[] = [];

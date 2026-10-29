@@ -194,6 +194,8 @@ export const zh: Catalog = {
     runningWith_one: "一个轮次正在运行，后面排着 {{count}} 条消息。",
     runningWith_other: "一个轮次正在运行，后面排着 {{count}} 条消息。",
     full: "此对话已有 {{limit}} 条消息：一条在运行，{{queued}} 条排在后面。让它先赶上，运行 `/stop` 结束进行中的那条并让下一条开始，或运行 `/stop all:true` 连队列一起丢弃。",
+    started: "已离开队列：它的轮次已经开始。",
+    dropped: "已因停止而从队列中移除。",
   },
   restart: {
     unsupervised:
