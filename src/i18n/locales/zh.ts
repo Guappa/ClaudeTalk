@@ -266,6 +266,7 @@ export const zh: Catalog = {
   },
   schedules: {
     due: "**计划任务 `{{id}}` 到时间了：** {{prompt}}",
+    wake: "**由主机上的脚本唤醒：** {{prompt}}",
   },
   attention: {
     waiting: "等待你的回复",

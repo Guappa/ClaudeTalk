@@ -286,6 +286,7 @@ export const en = {
   },
   schedules: {
     due: "**Scheduled task `{{id}}` is due:** {{prompt}}",
+    wake: "**Woken by a script on the host:** {{prompt}}",
   },
   attention: {
     waiting: "Waiting for your answer",

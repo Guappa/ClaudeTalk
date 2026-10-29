@@ -896,6 +896,42 @@ Limits, each stated so it is not mistaken for a fault:
 - `/clear`, `/unbind` and a deleted channel end the conversation's tasks with
   it. A task a subagent schedules belongs to the subagent and is not kept.
 
+### Waking it from the host
+
+A script on the host, a systemd timer or a cron job, can start a turn in a
+bound conversation when it finds something to do, so nothing runs in between:
+
+```bash
+npm run wake -- <session id> "the build on main failed, look at why"
+npm run wake -- <session id> < prompt.txt
+```
+
+The session id is the one in the `claude --resume <id>` line `/whoami` shows.
+The prompt runs the way a due scheduled task does: a line in the channel says
+it came from the host, it waits behind a running turn, and its questions,
+approval requests and answer mention whoever owns the conversation. The
+command waits for the bridge to take the request, which it looks for every 30
+seconds, and says what happened. Its exit code is for the script calling it:
+
+- `0`: sent. The turn has started or is queued; the command does not wait for
+  it to finish, and anything that ends it later, `/stop` included, shows in the
+  channel.
+- `1`: not sent. No bridge is running or it is stopping, the conversation
+  cannot take a turn now (open in a terminal on the host, say; the reason is
+  printed), or the bridge did not take the request within 45 seconds, in which
+  case the request is withdrawn.
+- `2`: no session id or no prompt given.
+- `3`: no channel the bridge can reach is bound to that session.
+- `4`: the bridge took the request and did not say whether it sent it. It may
+  still run, so look in the channel before asking again.
+
+It is a file, `data/wake/<id>.json`, not a socket, for the reason a stop
+request is: it crosses every boundary the bridge runs behind. A request
+carries the moment the command stops waiting, and one found after that is
+never sent, so a command killed halfway leaves nothing to go off days later.
+Anyone who can write that folder runs as the host user already, so it asks
+for nothing more.
+
 ## Compaction and context
 
 Compaction starting replaces the status line with a notice that counts elapsed
@@ -1032,6 +1068,7 @@ the language it started in, so its trail does not change tongue halfway.
 | `data/operators.json` | Who an owner made an operator |
 | `data/language.json` | The language picked with `/language`. Absent until someone picks one |
 | `data/schedules.json` | Tasks conversations scheduled with Claude Code's own tools, and when each next falls due. Absent until a turn schedules one; lost, the tasks are lost as a closed terminal loses them |
+| `data/wake/` | Prompts `npm run wake` hands the bridge, and its answers. Each is removed once it is taken and answered |
 | `data/trail.json` | The kinds of tool call the trail leaves out by default, set with `/trail everywhere:True`. Absent until an owner sets one |
 | `data/bridge.lock` | Prevents a second instance. Delete only if you are sure nothing is running |
 | `data/update.json` | The newer version an owner was last told of, and when, so it is said once and at most weekly |

@@ -2,7 +2,9 @@ import type { Client, SendableChannels } from "discord.js";
 import type { Bridge } from "../bridge.ts";
 import type { Conversation } from "../conversations.ts";
 import type { ScheduledTask } from "../claude/scheduledTasks.ts";
+import { lockPathBeside } from "../instanceLock.ts";
 import { errorMessage, truncate } from "../text.ts";
+import { type WakeAnswer, type WakeRequest, takeWakeRequests } from "../wakeRequests.ts";
 import { forDiscord } from "./outgoing.ts";
 import { NO_MENTIONS, channelSink } from "./sink.ts";
 import { runConversationTurn } from "./turn.ts";
@@ -17,21 +19,18 @@ function whoToTell(bridge: Bridge, conversation: Conversation): string[] {
   return conversation.ownerId ? [conversation.ownerId] : bridge.config.ownerIds;
 }
 
-// A due task's prompt goes to its conversation as a turn of its own, as a terminal kept open would run it: queued behind a turn already running, and answered in the channel.
-async function sendDue(
+// A prompt from a schedule or a wake request goes to its conversation as a turn of its own, as a terminal kept open would run it: queued behind a turn already running, and answered in the channel.
+async function sendPrompt(
   bridge: Bridge,
   channel: SendableChannels,
   conversation: Conversation,
-  task: ScheduledTask,
+  announcement: string,
+  prompt: string,
 ): Promise<void> {
-  const say = bridge.language.say;
-  const announced = await channel.send({
-    content: forDiscord(say("schedules.due", { id: task.id, prompt: truncate(task.prompt, SHOWN_PROMPT_CHARS) })),
-    allowedMentions: NO_MENTIONS,
-  });
+  const announced = await channel.send({ content: forDiscord(announcement), allowedMentions: NO_MENTIONS });
   bridge.latestPosts.set(channel.id, announced.id);
   await runConversationTurn(bridge, conversation, {
-    prompt: task.prompt,
+    prompt,
     sink: channelSink(channel, {
       replyToMessageId: announced.id,
       notifyUserIds: whoToTell(bridge, conversation),
@@ -39,6 +38,10 @@ async function sendDue(
     }),
     unattended: true,
   });
+}
+
+function announceDue(bridge: Bridge, task: ScheduledTask): string {
+  return bridge.language.say("schedules.due", { id: task.id, prompt: truncate(task.prompt, SHOWN_PROMPT_CHARS) });
 }
 
 export async function fireDueTasks(bridge: Bridge, client: Client): Promise<void> {
@@ -52,10 +55,29 @@ export async function fireDueTasks(bridge: Bridge, client: Client): Promise<void
     }
     const channel = await client.channels.fetch(conversation.channels.text).catch(() => null);
     if (!channel?.isSendable()) continue;
-    void sendDue(bridge, channel, conversation, task).catch((error: unknown) => {
+    void sendPrompt(bridge, channel, conversation, announceDue(bridge, task), task.prompt).catch((error: unknown) => {
       console.error(`Scheduled task ${task.id} of ${sessionId} could not be sent: ${errorMessage(error)}`);
     });
   }
+}
+
+// A wake request names a session rather than a channel, since that is what a script on the host can know.
+async function deliverWake(bridge: Bridge, client: Client, request: WakeRequest): Promise<WakeAnswer> {
+  const conversation = bridge.store.bySession(request.sessionId);
+  const channel = conversation ? await client.channels.fetch(conversation.channels.text).catch(() => null) : null;
+  if (!conversation || !channel?.isSendable()) return { outcome: "unbound" };
+  // Asked before anything is posted, so a conversation held elsewhere on the host is told to the script rather than left as a lone announcement.
+  const check = bridge.flow.available(request.sessionId, await bridge.sessions.find(request.sessionId));
+  if (check.kind !== "ok") return { outcome: "refused", reason: check.message };
+  const announcement = bridge.language.say("schedules.wake", { prompt: truncate(request.prompt, SHOWN_PROMPT_CHARS) });
+  void sendPrompt(bridge, channel, conversation, announcement, request.prompt).catch((error: unknown) => {
+    console.error(`Wake request ${request.id} for ${request.sessionId} could not be sent: ${errorMessage(error)}`);
+  });
+  return { outcome: "sent" };
+}
+
+export async function fireWakeRequests(bridge: Bridge, client: Client): Promise<void> {
+  await takeWakeRequests(lockPathBeside(bridge.config.bindingsPath), (request) => deliverWake(bridge, client, request));
 }
 
 export function watchSchedules(bridge: Bridge, client: Client): NodeJS.Timeout {
@@ -64,7 +86,7 @@ export function watchSchedules(bridge: Bridge, client: Client): NodeJS.Timeout {
   const timer = setInterval(() => {
     if (checking) return;
     checking = true;
-    void fireDueTasks(bridge, client)
+    void Promise.all([fireDueTasks(bridge, client), fireWakeRequests(bridge, client)])
       .catch((error: unknown) => {
         console.error(`Scheduled tasks could not be checked: ${errorMessage(error)}`);
       })

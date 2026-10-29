@@ -248,10 +248,10 @@ describe("docs follow code", () => {
     expect(unit).toMatch(/^TimeoutStopSec=1800$/m);
   });
 
-  // The stop script finds the bridge by the same setting the bridge placed its lock with, which lives in .env.
+  // The stop and wake scripts find the bridge by the same setting the bridge placed its lock with, which lives in .env.
   it("runs the stop script with the environment the bridge itself is started with", () => {
     const scripts = (JSON.parse(read("package.json")) as { scripts: Record<string, string> }).scripts;
-    for (const name of ["dev", "stop", "stop:now"]) expect(scripts[name], name).toContain("--env-file-if-exists=.env");
+    for (const name of ["dev", "stop", "stop:now", "wake"]) expect(scripts[name], name).toContain("--env-file-if-exists=.env");
   });
 });
 

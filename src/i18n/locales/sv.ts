@@ -289,6 +289,7 @@ export const sv: Catalog = {
   },
   schedules: {
     due: "**Schemalagd uppgift `{{id}}` ska köras:** {{prompt}}",
+    wake: "**Väckt av ett skript på värddatorn:** {{prompt}}",
   },
   attention: {
     waiting: "Väntar på ditt svar",

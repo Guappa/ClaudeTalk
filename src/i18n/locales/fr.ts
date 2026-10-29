@@ -289,6 +289,7 @@ export const fr: Catalog = {
   },
   schedules: {
     due: "**Tâche planifiée `{{id}}` à lancer :** {{prompt}}",
+    wake: "**Réveillé par un script sur l’hôte :** {{prompt}}",
   },
   attention: {
     waiting: "En attente de ta réponse",
