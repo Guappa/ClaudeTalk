@@ -212,6 +212,8 @@ export const es: Catalog = {
     runningWith_one: "Hay un turno en marcha, con {{count}} mensaje en cola detrás.",
     runningWith_other: "Hay un turno en marcha, con {{count}} mensajes en cola detrás.",
     full: "Esta conversación ya tiene {{limit}} mensajes: uno en marcha y {{queued}} en cola detrás. Deja que se ponga al día, ejecuta `/stop` para terminar el que está en curso y dejar que empiece el siguiente, o `/stop all:true` para descartar también la cola.",
+    started: "Fuera de la cola: su turno ha empezado.",
+    dropped: "Quitado de la cola al detener.",
   },
   restart: {
     unsupervised:

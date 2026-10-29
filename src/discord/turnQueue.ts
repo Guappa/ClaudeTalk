@@ -7,6 +7,8 @@ export type QueueOutcome = { kind: "run-now" } | { kind: "queued"; ahead: number
 interface Ticket {
   started: boolean;
   cancelled: boolean;
+  // Names a message that can be taken back while it waits.
+  id?: string;
 }
 
 interface Lane {
@@ -68,10 +70,19 @@ export class TurnQueue {
     return dropped.length;
   }
 
-  // Resolves true once the work ran, false when a drain skipped it.
-  async enqueue(key: string, work: () => Promise<void>): Promise<boolean> {
+  // A message still waiting is skipped when its place comes up; one already started is the caller's to stop. Null when no waiting message has that id.
+  withdraw(key: string, id: string): "withdrawn" | "started" | null {
+    const ticket = this.lanes.get(key)?.tickets.find((entry) => entry.id === id && !entry.cancelled);
+    if (!ticket) return null;
+    if (ticket.started) return "started";
+    ticket.cancelled = true;
+    return "withdrawn";
+  }
+
+  // Resolves true once the work ran, false when a drain or a withdrawal skipped it.
+  async enqueue(key: string, work: () => Promise<void>, id?: string): Promise<boolean> {
     const lane = this.lanes.get(key) ?? { chain: Promise.resolve(), tickets: [] };
-    const ticket: Ticket = { started: false, cancelled: false };
+    const ticket: Ticket = { started: false, cancelled: false, id };
     lane.tickets.push(ticket);
     this.lanes.set(key, lane);
 

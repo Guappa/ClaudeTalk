@@ -851,7 +851,9 @@ What is not a plain message still queues and runs as its own turn when the
 current one finishes: a slash command, anything started by a bridge command
 such as `/run` or `/ask`, and a message that arrives before the turn is under
 way or as it is ending. The bot says how many are ahead of it, and `/queue`
-says so on demand. Five is the ceiling; past that it refuses and points at
+says so on demand. That notice has the same **Take back** button: a message
+taken back while it waits never runs, and once its turn starts the notice says
+so and the button is gone. Five is the ceiling; past that it refuses and points at
 `/stop`, rather than letting a mistyped burst pile up turns you no longer want.
 A turn that fails does not block what is queued behind it, and a queued message
 checks for drift only once the turn ahead has ended and been marked seen.

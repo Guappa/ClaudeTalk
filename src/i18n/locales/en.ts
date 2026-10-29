@@ -207,6 +207,8 @@ export const en = {
     runningWith_one: "One turn is running, with {{count}} message queued behind it.",
     runningWith_other: "One turn is running, with {{count}} messages queued behind it.",
     full: "This conversation already holds {{limit}} messages: one running and {{queued}} queued behind it. Let it catch up, run `/stop` to end the one in flight and let the next start, or `/stop all:true` to drop the queue with it.",
+    started: "Out of the queue: its turn has started.",
+    dropped: "Dropped from the queue by a stop.",
   },
   restart: {
     unsupervised:

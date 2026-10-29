@@ -210,6 +210,8 @@ export const sv: Catalog = {
     runningWith_one: "En omgång körs, med {{count}} meddelande i kö efter den.",
     runningWith_other: "En omgång körs, med {{count}} meddelanden i kö efter den.",
     full: "Den här konversationen håller redan {{limit}} meddelanden: ett som körs och {{queued}} i kö efter det. Låt den komma ikapp, kör `/stop` för att avsluta det som körs och låta nästa börja, eller `/stop all:true` för att tömma kön också.",
+    started: "Ur kön: dess omgång har börjat.",
+    dropped: "Borttaget ur kön av ett stopp.",
   },
   restart: {
     unsupervised:
