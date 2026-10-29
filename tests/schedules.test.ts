@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,8 @@ import type { ClaudeEvent } from "../src/claude/events.ts";
 import { nextFire, parseCron } from "../src/claude/cron.ts";
 import { ScheduleReader } from "../src/claude/scheduledTasks.ts";
 import { ScheduleStore } from "../src/schedules.ts";
+import { lockPathBeside } from "../src/instanceLock.ts";
+import { requestWake, takeWakeAnswer, takeWakeRequests, withdrawWake } from "../src/wakeRequests.ts";
 import { fakeChannel } from "./helpers/discord.ts";
 import { OWNER, testBridge } from "./helpers/bridge.ts";
 import type { MessageSink } from "../src/discord/messageSink.ts";
@@ -23,7 +26,7 @@ vi.mock("../src/discord/turn.ts", () => ({
   },
 }));
 
-const { fireDueTasks } = await import("../src/discord/scheduleWatcher.ts");
+const { fireDueTasks, fireWakeRequests } = await import("../src/discord/scheduleWatcher.ts");
 
 const at = (year: number, month: number, day: number, hour: number, minute: number): Date =>
   new Date(year, month - 1, day, hour, minute);
@@ -213,11 +216,11 @@ describe("ScheduleStore", () => {
   });
 });
 
-describe("fireDueTasks", () => {
-  function clientWith(channels: Record<string, unknown>): Client {
-    return { channels: { fetch: async (id: string) => channels[id] ?? null } } as unknown as Client;
-  }
+function clientWith(channels: Record<string, unknown>): Client {
+  return { channels: { fetch: async (id: string) => channels[id] ?? null } } as unknown as Client;
+}
 
+describe("fireDueTasks", () => {
   it("announces a due task in its conversation's channel and sends its prompt as an unattended turn, once", async () => {
     ran.length = 0;
     const bridge = await testBridge();
@@ -267,5 +270,178 @@ describe("fireDueTasks", () => {
     await fireDueTasks(bridge, clientWith({}));
     expect(bridge.schedules.of("s-gone")).toEqual([]);
     expect(ran).toEqual([]);
+  });
+});
+
+describe("wake requests", () => {
+  const soon = (): Date => new Date(Date.now() + 60_000);
+  const tempLock = async (): Promise<string> => path.join(await fs.mkdtemp(path.join(os.tmpdir(), "wake-")), "bridge.lock");
+
+  it("is delivered once and answered, and the answer is taken once", async () => {
+    const lockPath = await tempLock();
+    const id = await requestWake(lockPath, "s-1", "look at the build", soon());
+    const delivered: string[] = [];
+    const deliver = async (request: { prompt: string }) => {
+      delivered.push(request.prompt);
+      return { outcome: "sent" as const };
+    };
+
+    await takeWakeRequests(lockPath, deliver);
+    await takeWakeRequests(lockPath, deliver);
+
+    expect(delivered).toEqual(["look at the build"]);
+    expect(await takeWakeAnswer(lockPath, id)).toEqual({ outcome: "sent" });
+    expect(await takeWakeAnswer(lockPath, id)).toBeNull();
+  });
+
+  it("answers a request it cannot read without delivering it", async () => {
+    const lockPath = await tempLock();
+    const id = await requestWake(lockPath, " ", "no session named", soon());
+    const deliver = vi.fn();
+
+    await takeWakeRequests(lockPath, deliver);
+
+    expect(deliver).not.toHaveBeenCalled();
+    expect(await takeWakeAnswer(lockPath, id)).toEqual({ outcome: "unreadable" });
+  });
+
+  // A script that gave up must either take its request back or know the bridge has it, never both or neither.
+  it("can be withdrawn until the bridge claims it, and not after", async () => {
+    const lockPath = await tempLock();
+    const withdrawn = await requestWake(lockPath, "s-1", "never mind", soon());
+    expect(await withdrawWake(lockPath, withdrawn)).toBe(true);
+    const deliver = vi.fn(async () => ({ outcome: "sent" as const }));
+    await takeWakeRequests(lockPath, deliver);
+    expect(deliver).not.toHaveBeenCalled();
+
+    const claimed = await requestWake(lockPath, "s-1", "too late", soon());
+    let duringDelivery: boolean | null = null;
+    await takeWakeRequests(lockPath, async () => {
+      duringDelivery = await withdrawWake(lockPath, claimed);
+      return { outcome: "sent" };
+    });
+    expect(duringDelivery).toBe(false);
+    expect(await takeWakeAnswer(lockPath, claimed)).toEqual({ outcome: "sent" });
+  });
+
+  it("sends the prompt to the conversation holding the session as an unattended turn, announced in its channel", async () => {
+    ran.length = 0;
+    const bridge = await testBridge();
+    await bridge.store.bindNew({
+      sessionId: "s-wake",
+      cwd: bridge.config.projectsRoot,
+      channelId: "chan-wake",
+      ownerId: "100000000000000001",
+    });
+    const lockPath = lockPathBeside(bridge.config.bindingsPath);
+    const id = await requestWake(lockPath, "s-wake", "the checker found new work", soon());
+    const fake = fakeChannel("chan-wake");
+
+    await fireWakeRequests(bridge, clientWith({ "chan-wake": fake.channel }));
+    await fireWakeRequests(bridge, clientWith({ "chan-wake": fake.channel }));
+    await vi.waitFor(() => expect(ran).toHaveLength(1));
+
+    expect(fake.posted[0]).toContain("the checker found new work");
+    expect(ran[0]).toMatchObject({ prompt: "the checker found new work", unattended: true });
+    expect(await takeWakeAnswer(lockPath, id)).toEqual({ outcome: "sent" });
+  });
+
+  it("answers that no conversation holds a session nobody bound, and sends nothing", async () => {
+    ran.length = 0;
+    const bridge = await testBridge();
+    const lockPath = lockPathBeside(bridge.config.bindingsPath);
+    const id = await requestWake(lockPath, "s-nobody", "anyone there?", soon());
+
+    await fireWakeRequests(bridge, clientWith({}));
+
+    expect(await takeWakeAnswer(lockPath, id)).toEqual({ outcome: "unbound" });
+    expect(ran).toEqual([]);
+  });
+
+  // A script killed before it could withdraw leaves its request behind; it must not be sent whenever the bridge next looks.
+  it("answers a request past its expiry without delivering it", async () => {
+    const lockPath = await tempLock();
+    const id = await requestWake(lockPath, "s-1", "stale", new Date(Date.now() - 1000));
+    const deliver = vi.fn();
+
+    await takeWakeRequests(lockPath, deliver);
+
+    expect(deliver).not.toHaveBeenCalled();
+    expect(await takeWakeAnswer(lockPath, id)).toEqual({ outcome: "expired" });
+  });
+
+  it("answers a delivery that throws, with the reason, so the script is never left waiting on a claim", async () => {
+    const lockPath = await tempLock();
+    const id = await requestWake(lockPath, "s-1", "boom", soon());
+
+    await takeWakeRequests(lockPath, async () => {
+      throw new Error("channel fetch timed out");
+    });
+
+    expect(await takeWakeAnswer(lockPath, id)).toEqual({ outcome: "failed", reason: "channel fetch timed out" });
+  });
+
+  it("refuses with the reason when the conversation cannot take a turn, and posts nothing", async () => {
+    ran.length = 0;
+    const bridge = await testBridge();
+    await bridge.store.bindNew({ sessionId: "s-held", cwd: bridge.config.projectsRoot, channelId: "chan-held", ownerId: OWNER });
+    vi.spyOn(bridge.flow, "available").mockReturnValue({ kind: "refused", message: "Open in a terminal on the host." });
+    const lockPath = lockPathBeside(bridge.config.bindingsPath);
+    const id = await requestWake(lockPath, "s-held", "go", soon());
+    const fake = fakeChannel("chan-held");
+
+    await fireWakeRequests(bridge, clientWith({ "chan-held": fake.channel }));
+
+    expect(await takeWakeAnswer(lockPath, id)).toEqual({ outcome: "refused", reason: "Open in a terminal on the host." });
+    expect(fake.posted).toEqual([]);
+    expect(ran).toEqual([]);
+  });
+});
+
+describe("npm run wake", () => {
+  const script = path.join(import.meta.dirname, "..", "scripts", "wake.mjs");
+
+  function runWake(bindingsPath: string, args: string[]): Promise<{ code: number | null; output: string }> {
+    return new Promise((resolve) => {
+      const child = execFile(
+        process.execPath,
+        ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", script, ...args],
+        { env: { ...process.env, BINDINGS_PATH: bindingsPath } },
+        (_error, stdout, stderr) => resolve({ code: child.exitCode, output: `${stdout}${stderr}` }),
+      );
+      child.stdin?.end();
+    });
+  }
+
+  const tempBindings = async (): Promise<string> =>
+    path.join(await fs.mkdtemp(path.join(os.tmpdir(), "wake-script-")), "conversations.json");
+
+  it("refuses without a session id or a prompt", async () => {
+    const result = await runWake(await tempBindings(), ["s-1"]);
+    expect(result.code).toBe(2);
+    expect(result.output).toContain("Usage: npm run wake");
+  });
+
+  it("says no bridge is running when there is no live lock, and leaves no request behind", async () => {
+    const bindingsPath = await tempBindings();
+    const result = await runWake(bindingsPath, ["s-1", "hello"]);
+    expect(result.code).toBe(1);
+    expect(result.output).toContain("no bridge is running");
+    await expect(fs.readdir(path.join(path.dirname(bindingsPath), "wake"))).rejects.toThrow();
+  });
+
+  it("exits with the code for an unbound session when the bridge answers so", async () => {
+    const bindingsPath = await tempBindings();
+    const lockPath = lockPathBeside(bindingsPath);
+    const now = new Date().toISOString();
+    await fs.writeFile(lockPath, JSON.stringify({ pid: process.pid, startedAt: now, heartbeatAt: now }));
+    const answering = setInterval(() => {
+      void takeWakeRequests(lockPath, async () => ({ outcome: "unbound" }));
+    }, 100);
+
+    const result = await runWake(bindingsPath, ["s-1", "hello"]).finally(() => clearInterval(answering));
+
+    expect(result.code).toBe(3);
+    expect(result.output).toContain("no channel the bridge can reach is bound to session s-1");
   });
 });

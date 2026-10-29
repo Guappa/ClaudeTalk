@@ -296,6 +296,7 @@ export const de: Catalog = {
   },
   schedules: {
     due: "**Geplante Aufgabe `{{id}}` ist fällig:** {{prompt}}",
+    wake: "**Von einem Skript auf dem Host geweckt:** {{prompt}}",
   },
   attention: {
     waiting: "Wartet auf deine Antwort",

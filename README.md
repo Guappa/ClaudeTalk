@@ -35,6 +35,7 @@ Claude Code's own transcript, so nothing here owns it.
 | Stop and steer | A **Stop** button ends a turn. A message sent while one runs is handed to it and taken up at its next step, or at once with **Send now**. |
 | Pings | A question or approval request always pings, headed so it stands out; a long turn's answer or failure pings only if you have been away. |
 | Scheduled tasks | `/loop`, reminders and Claude's own scheduled tasks run as they would in an open terminal: the bridge sends each prompt into the conversation when it falls due, with no process kept waiting in between. |
+| Wake from the host | `npm run wake -- <session id> <prompt>` lets a timer or a script on the host start a turn in a bound conversation, so a check that finds nothing costs nothing. See [Waking it from the host](docs/REFERENCE.md#waking-it-from-the-host). |
 | Files both ways | Attach files to a message; an image is shown to Claude with your words, with no tool call spent on reading it. Claude sends files back by writing them to a folder. |
 | Claude Code's commands | Skills, plugin commands and Claude Code's own slash commands, through `/run` and `/skills`. |
 | Plugins and MCP servers | `/plugins` toggles a plugin. `/mcp` shows what each MCP server is doing and switches one off or on, or reconnects it. |
