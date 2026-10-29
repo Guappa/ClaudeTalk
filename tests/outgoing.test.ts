@@ -852,6 +852,7 @@ describe("repo links against a real repository", () => {
     await fs.writeFile(path.join(repo, "local-only.md"), "not tracked\n");
     run("add", "committed.md");
     run("commit", "-q", "-m", "initial");
+    run("update-ref", "refs/remotes/origin/main", "HEAD");
 
     const links = await resolveReferences(repo, "See `committed.md` and `local-only.md`.");
     expect(links?.file("committed.md")).toContain("/blob/");
@@ -870,9 +871,38 @@ describe("repo links against a real repository", () => {
     await fs.writeFile(path.join(inside, "src", "entry.ts"), "export {};\n");
     run("add", ".");
     run("commit", "-q", "-m", "initial");
+    run("update-ref", "refs/remotes/origin/main", "HEAD");
 
     const links = await resolveReferences(inside, "See `src/entry.ts`.");
     expect(links?.file("src/entry.ts", "3")).toMatch(/\/blob\/[0-9a-f]{40}\/packages\/app\/src\/entry\.ts#L3$/);
+    await fs.rm(repo, { recursive: true, force: true });
+  });
+
+  // A commit, branch or file the remote does not have yet would link to a 404 until it is pushed.
+  it("links only what the remote has: a pushed commit, not one made since, and no file while HEAD is unpushed", {
+    timeout: REAL_GIT_MS,
+  }, async () => {
+    const repo = await fs.mkdtemp(path.join(os.tmpdir(), "links-unpushed-"));
+    const run = (...args: string[]) => execFileSync("git", ["-C", repo, ...GIT_IDENTITY, ...args], { stdio: "pipe" });
+    const sha = () => execFileSync("git", ["-C", repo, "rev-parse", "--short=7", "HEAD"], { encoding: "utf8" }).trim();
+    run("init", "-q", "-b", "main");
+    run("remote", "add", "origin", "https://example.com/acme/ledger.git");
+    await fs.writeFile(path.join(repo, "notes.md"), "one\n");
+    run("add", "notes.md");
+    run("commit", "-q", "-m", "pushed");
+    run("update-ref", "refs/remotes/origin/main", "HEAD");
+    const pushed = sha();
+    run("switch", "-q", "-c", "feat/local");
+    await fs.writeFile(path.join(repo, "notes.md"), "two\n");
+    run("commit", "-q", "-am", "local");
+    const local = sha();
+
+    const links = await resolveReferences(repo, `See ${pushed}, ${local}, \`main\`, \`feat/local\` and \`notes.md\`.`);
+    expect(links?.commit(pushed)).toContain(`/commit/${pushed}`);
+    expect(links?.commit(local)).toBeNull();
+    expect(links?.ref("main")).toContain("/tree/main");
+    expect(links?.ref("feat/local")).toBeNull();
+    expect(links?.file("notes.md")).toBeNull();
     await fs.rm(repo, { recursive: true, force: true });
   });
 });

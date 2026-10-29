@@ -652,7 +652,10 @@ issues, `!` numbers for merge requests on
 GitLab, branch and tag names written in code
 spans, and file paths with an optional `:line` or `:from-to`. Each repository
 reference is checked first, so a word that merely looks like a hash, or a path
-that is not in the committed tree, stays plain text. A path is read from the
+that is not in the committed tree, stays plain text. Only what the remote has
+links, as far as the last fetch or push tells: a commit not yet pushed, a
+branch that exists only here, and file paths while the checked-out commit is
+unpushed stay plain until they are pushed, since their links would not open. A path is read from the
 conversation's working directory and linked from the repository's root, so a
 conversation in a folder below the root links correctly. A bare name ending in
 `.sh` or `.app`, `deploy.sh` say, is a file far more often than a site and
