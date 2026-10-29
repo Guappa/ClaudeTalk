@@ -460,6 +460,18 @@ function existingCommits(cwd: string, hashes: string[]): Promise<Set<string>> {
   });
 }
 
+// The remote has what a remote-tracking ref reaches as of the last fetch or push; a commit made since, or a branch never pushed, would link to a 404.
+async function onRemote(cwd: string, commit: string): Promise<boolean> {
+  return Boolean(
+    await git(cwd, ["for-each-ref", "--count=1", "--format=%(refname)", "--contains", commit, "refs/remotes/origin"]),
+  );
+}
+
+async function published(cwd: string, hashes: Set<string>): Promise<Set<string>> {
+  const checked = await Promise.all([...hashes].map(async (hash) => ((await onRemote(cwd, hash)) ? hash : null)));
+  return new Set(checked.filter((hash): hash is string => hash !== null));
+}
+
 // A blob link names the committed tree, so a file that is only on disk, ignored or unstaged, gets no link.
 async function existingFiles(cwd: string, files: string[]): Promise<Set<string>> {
   const inside = files.filter((file) => isWithin(cwd, path.resolve(cwd, file)));
@@ -491,16 +503,20 @@ export async function resolveReferences(cwd: string, text: string): Promise<Refe
   // None of these needs another's answer, and each is a process of its own; asked at once, together they take as long as the slowest.
   const [refs, commits, files, tracker] = await Promise.all([
     wanted.names.size > 0 ? git(cwd, ["for-each-ref", "--format=%(refname)"]) : Promise.resolve(""),
-    wanted.hashes.size > 0 ? existingCommits(cwd, [...wanted.hashes]) : Promise.resolve(new Set<string>()),
-    wanted.files.size > 0 ? existingFiles(cwd, [...wanted.files]) : Promise.resolve(new Set<string>()),
+    wanted.hashes.size > 0
+      ? existingCommits(cwd, [...wanted.hashes]).then((found) => published(cwd, found))
+      : Promise.resolve(new Set<string>()),
+    // A blob link names HEAD's commit, which the remote has only once it is pushed.
+    wanted.files.size > 0
+      ? onRemote(cwd, head).then((pushed) => (pushed ? existingFiles(cwd, [...wanted.files]) : new Set<string>()))
+      : Promise.resolve(new Set<string>()),
     // The one question here that leaves the machine, so it is asked only of a message that cites a number.
     numbers.length > 0 ? trackerFor(cwd, webUrl, numbers) : Promise.resolve(null),
   ]);
   const branches = new Set<string>();
   const tags = new Set<string>();
   for (const ref of (refs ?? "").split("\n")) {
-    if (ref.startsWith("refs/heads/")) branches.add(ref.slice("refs/heads/".length));
-    else if (ref.startsWith("refs/remotes/origin/")) branches.add(ref.slice("refs/remotes/origin/".length));
+    if (ref.startsWith("refs/remotes/origin/")) branches.add(ref.slice("refs/remotes/origin/".length));
     else if (ref.startsWith("refs/tags/")) tags.add(ref.slice("refs/tags/".length));
   }
 
