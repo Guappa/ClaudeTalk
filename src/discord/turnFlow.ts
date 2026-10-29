@@ -7,6 +7,7 @@ import {
   type ToolDecision,
   type TurnRequest,
   type TurnResult,
+  type WithdrawOutcome,
 } from "../claude/runner.ts";
 import type { PromptImage } from "../claude/heldPrompt.ts";
 import { LongCalls, type LongCall } from "../claude/longCalls.ts";
@@ -44,7 +45,7 @@ import { setTimeout as wait } from "node:timers/promises";
 import { errorMessage, shownError } from "../text.ts";
 import { outboxRelative } from "../outboxFolder.ts";
 import { TurnQueue, describeFull, describeQueued } from "./turnQueue.ts";
-import { sendNowActionId, stopActionId, stopAgentsActionId, stopAllActionId } from "./menus.ts";
+import { sendNowActionId, stopActionId, stopAgentsActionId, stopAllActionId, takeBackActionId } from "./menus.ts";
 import type { OutboxDelivery } from "./outboxDelivery.ts";
 import type { StateMarker } from "./reactions.ts";
 import type { Mood } from "./statusMessage.ts";
@@ -151,6 +152,19 @@ const SEND_NOW_OUTCOMES = {
 
 export function describeSendNow(say: Say, outcome: SendNowOutcome): string {
   return say(SEND_NOW_OUTCOMES[outcome]);
+}
+
+export type TakeBackOutcome = WithdrawOutcome;
+
+const TAKE_BACK_OUTCOMES = {
+  withdrawn: "fold.takenBack",
+  taken: "fold.tooLate",
+  gone: "fold.nothingToTakeBack",
+  unsupported: "fold.cannotTakeBack",
+} as const;
+
+export function describeTakeBack(say: Say, outcome: TakeBackOutcome): string {
+  return say(TAKE_BACK_OUTCOMES[outcome]);
 }
 
 export interface StopOutcome {
@@ -542,8 +556,11 @@ export class TurnFlow {
     this.folded.set(sessionId, waiting);
     await options.onState?.("queued");
     const say = this.sayFor(sessionId);
-    const hurry = [{ id: sendNowActionId(sessionId), label: say("fold.sendNow") }];
-    entry.notice = (await sink.ask?.(say("fold.handedOver"), hurry)) ?? null;
+    const choices = [
+      { id: sendNowActionId(sessionId), label: say("fold.sendNow") },
+      { id: takeBackActionId(sessionId, uuid), label: say("fold.takeBack"), tone: "danger" as const },
+    ];
+    entry.notice = (await sink.ask?.(say("fold.handedOver"), choices)) ?? null;
     // It can be taken up, or the turn can end, while the notice is still on its way.
     if (entry.taken) await entry.notice?.close(say("fold.takenUp"));
     else if (entry.missed) await entry.notice?.close(say("fold.neverTaken"));
@@ -570,6 +587,21 @@ export class TurnFlow {
       await entry.onState?.(entry.taken ? state : "stopped");
       entry.settled.resolve();
     }
+  }
+
+  // A message taken back ends as one that was never sent: its notice says so and its own turn settles with nothing taken.
+  async takeBack(sessionId: string, uuid: string): Promise<TakeBackOutcome> {
+    const entry = this.folded.get(sessionId)?.get(uuid);
+    const turn = this.running.get(sessionId);
+    if (!entry || !turn) return "gone";
+    if (entry.taken) return "taken";
+    const outcome = await turn.withdraw(uuid);
+    // The turn can end while the session is asked, and its ending has then already settled this message.
+    if (outcome !== "withdrawn" || !this.folded.get(sessionId)?.delete(uuid)) return outcome;
+    await entry.notice?.close(this.sayFor(sessionId)("fold.takenBack"));
+    await entry.onState?.("stopped");
+    entry.settled.resolve();
+    return "withdrawn";
   }
 
   // What Send now would throw away, so the press can ask first.

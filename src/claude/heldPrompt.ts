@@ -75,6 +75,21 @@ export class HeldPrompt {
     return uuid;
   }
 
+  // True when the message had not left for the session yet and never will; false when the session has it and only the session can drop it.
+  withdrawUnsent(uuid: string): boolean {
+    const index = this.unsent.findIndex((message) => message.uuid === uuid);
+    if (index < 0) return false;
+    this.unsent.splice(index, 1);
+    this.forget(uuid);
+    return true;
+  }
+
+  // A message taken back is no longer a reason to keep the input open after the answer.
+  forget(uuid: string): void {
+    this.untaken.delete(uuid);
+    if (this.answered && !this.awaitsUntaken && this.outstanding === 0) this.close();
+  }
+
   async *stream(): AsyncGenerator<SDKUserMessage> {
     await this.started;
     // Closed before the handshake is a turn stopped before it began, and the prompt must not reach a process that is still dying.

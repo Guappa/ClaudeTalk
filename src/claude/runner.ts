@@ -325,8 +325,16 @@ export interface RunningTurn {
   handOver: (text: string, images?: PromptImage[]) => string | null;
   // Cuts short what the turn is doing, so a message still waiting runs at once; false when there was nothing to tell, or it would not be told.
   interrupt: () => Promise<boolean>;
+  // Takes back a message handed over, as the terminal's up arrow does, while the session has not taken it up.
+  withdraw: (uuid: string) => Promise<WithdrawOutcome>;
   done: Promise<TurnResult>;
 }
+
+// Gone is a message whose session ended or is ending, so nothing will ever read it.
+export type WithdrawOutcome = "withdrawn" | "taken" | "gone" | "unsupported";
+
+// The session's command queue drops a message on request, but the SDK's published types do not list the call yet.
+type Withdrawable = Query & { cancelAsyncMessage?: (uuid: string) => Promise<boolean> };
 
 // The session a turn is talking to, once there is one; controls such as stopping a task go through it.
 interface Live {
@@ -418,7 +426,21 @@ export function runTurn(request: TurnRequest, onEvent: (event: ClaudeEvent) => v
     );
   };
 
-  return { stop, stopTasks, handOver, interrupt, done };
+  const withdraw = async (uuid: string): Promise<WithdrawOutcome> => {
+    if (attempt.held.withdrawUnsent(uuid)) return "withdrawn";
+    const session = attempt.live.query as Withdrawable | null;
+    if (!session || over) return "gone";
+    if (typeof session.cancelAsyncMessage !== "function") return "unsupported";
+    // A message already dequeued for a step answers false, which is the same as taken up; a request that fails means the session is going.
+    const outcome = await session.cancelAsyncMessage(uuid).then(
+      (cancelled): WithdrawOutcome => (cancelled ? "withdrawn" : "taken"),
+      (): WithdrawOutcome => "gone",
+    );
+    if (outcome === "withdrawn") attempt.held.forget(uuid);
+    return outcome;
+  };
+
+  return { stop, stopTasks, handOver, interrupt, withdraw, done };
 }
 
 // A session opened to ask Claude Code about the folder and nothing else: no message is sent, so no model is called, and no transcript is kept.

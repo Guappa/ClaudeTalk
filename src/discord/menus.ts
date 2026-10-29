@@ -25,6 +25,11 @@ export function sendNowActionId(sessionId: string): string {
   return `turn:sendnow:${sessionId}`.slice(0, CUSTOM_ID_CHARS);
 }
 
+// Names the message as well as the conversation, since several can be waiting on one turn.
+export function takeBackActionId(sessionId: string, uuid: string): string {
+  return `turn:takeback:${sessionId}:${uuid}`.slice(0, CUSTOM_ID_CHARS);
+}
+
 // Offered once Send now has said what it would cut short, and naming that call by when it started, so a press left over from an earlier one asks again.
 export function sendAnywayActionId(sessionId: string, startedAt: number): string {
   return `turn:sendanyway:${sessionId}:${startedAt}`.slice(0, CUSTOM_ID_CHARS);
@@ -83,6 +88,7 @@ export type MenuAction =
   | { kind: "turn-stop-agents"; sessionId: string }
   | { kind: "turn-send-now"; sessionId: string; confirmedFor: number | null }
   | { kind: "turn-send-wait"; sessionId: string }
+  | { kind: "turn-take-back"; sessionId: string; uuid: string }
   | { kind: "question-pick"; askId: string; index: number }
   | { kind: "question-other"; askId: string; index: number }
   | { kind: "question-submit"; askId: string }
@@ -146,6 +152,8 @@ export function parseCustomId(customId: string, selectedValue?: string): MenuAct
 
   const sendNow = /^turn:sendnow:(.+)$/.exec(customId);
   if (sendNow?.[1]) return { kind: "turn-send-now", sessionId: sendNow[1], confirmedFor: null };
+  const takeBack = /^turn:takeback:(.+):([0-9a-f-]{36})$/.exec(customId);
+  if (takeBack?.[1] && takeBack[2]) return { kind: "turn-take-back", sessionId: takeBack[1], uuid: takeBack[2] };
   const sendWait = /^turn:sendwait:(.+)$/.exec(customId);
   if (sendWait?.[1]) return { kind: "turn-send-wait", sessionId: sendWait[1] };
   const sendAnyway = /^turn:sendanyway:(.+):(\d+)$/.exec(customId);

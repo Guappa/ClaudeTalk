@@ -187,6 +187,11 @@ export const fr: Catalog = {
     takenUp: "Repris par le tour en cours.",
     neverTaken: "Le tour s'est terminé avant que ceci soit repris. Renvoie-le.",
     sendNow: "Envoyer maintenant",
+    takeBack: "Retirer",
+    takenBack: "Retiré. Claude ne l'a jamais vu.",
+    tooLate: "Trop tard : le tour en cours l'a déjà repris.",
+    nothingToTakeBack: "Rien à retirer : le message n'attend plus, car le tour l'a repris ou s'est terminé.",
+    cannotTakeBack: "Le Claude Code qu'utilise ce pont ne peut pas retirer un message. Arrêter met fin au tour à la place.",
     sent: "Envoyé maintenant. L'étape où en était Claude a été coupée pour qu'il puisse lire ton message, et il continue à partir de là. Les agents et commandes en arrière-plan qu'il avait lancés continuent de tourner ; celui qu'il attendait a été arrêté.",
     nothingWaiting: "Rien n'attend : le tour en cours a déjà repris ton message.",
     notRunning: "Plus aucun tour ne tourne ici, il n'y a donc rien à interrompre.",
@@ -289,7 +294,7 @@ export const fr: Catalog = {
   },
   schedules: {
     due: "**Tâche planifiée `{{id}}` à lancer :** {{prompt}}",
-    wake: "**Réveillé par un script sur l’hôte :** {{prompt}}",
+    wake: "**Réveillé par un script sur l'hôte :** {{prompt}}",
   },
   attention: {
     waiting: "En attente de ta réponse",

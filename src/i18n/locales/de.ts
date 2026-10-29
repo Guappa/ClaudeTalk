@@ -190,6 +190,13 @@ export const de: Catalog = {
     takenUp: "Vom laufenden Durchlauf aufgenommen.",
     neverTaken: "Der Durchlauf endete, bevor das aufgenommen wurde. Schick es noch einmal.",
     sendNow: "Jetzt senden",
+    takeBack: "Zurücknehmen",
+    takenBack: "Zurückgenommen. Claude hat sie nie gesehen.",
+    tooLate: "Zu spät: Claude hat sie schon aufgenommen.",
+    nothingToTakeBack:
+      "Nichts zurückzunehmen: Die Nachricht wartet nicht mehr, weil der Durchlauf sie aufgenommen hat oder zu Ende ist.",
+    cannotTakeBack:
+      "Das Claude Code, mit dem diese Bridge läuft, kann keine Nachricht zurücknehmen. Stopp beendet stattdessen den Durchlauf.",
     sent: "Jetzt gesendet. Der Schritt, an dem Claude war, wurde abgebrochen, damit es deine Nachricht lesen konnte, und es macht von dort weiter. Agenten und Befehle im Hintergrund, die es laufen hatte, laufen weiter; einer, auf den es wartete, wurde gestoppt.",
     nothingWaiting: "Nichts wartet: Der laufende Durchlauf hat deine Nachricht schon aufgenommen.",
     notRunning: "Hier läuft kein Durchlauf mehr, also gibt es nichts zu unterbrechen.",

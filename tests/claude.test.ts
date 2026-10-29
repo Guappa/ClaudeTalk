@@ -181,6 +181,35 @@ describe("HeldPrompt", () => {
   // A captured shape: replay echoes a handed-over message, at take-up mid-step and with the model's first output otherwise.
   const replay = (uuid: string) => ({ type: "user", message: { content: [] }, uuid, isReplay: true }) as ClaudeEvent;
 
+  // The terminal's up arrow takes back a message the session has not read; one still in the bridge's hands never reaches it at all.
+  it("takes back a message not yet passed on, and lets the input close as if it had never been handed over", async () => {
+    const held = new HeldPrompt("hello", [], 5);
+    const stream = held.stream();
+    held.ready();
+    await stream.next();
+    held.observe(spoke);
+
+    const uuid = held.handOver("never mind")!;
+    expect(held.withdrawUnsent(uuid)).toBe(true);
+    held.observe(result);
+    expect((await stream.next()).done).toBe(true);
+  });
+
+  it("leaves a message already passed on to the session, which only the session can drop", async () => {
+    const held = new HeldPrompt("hello", [], 5);
+    const stream = held.stream();
+    held.ready();
+    await stream.next();
+    held.observe(spoke);
+
+    const uuid = held.handOver("on its way")!;
+    await stream.next();
+    expect(held.withdrawUnsent(uuid)).toBe(false);
+    held.forget(uuid);
+    held.observe(result);
+    expect((await stream.next()).done).toBe(true);
+  });
+
   it("passes on a message handed over mid-turn, and refuses one before the turn is under way or after it has let go", async () => {
     const held = new HeldPrompt("hello", [], 5);
     expect(held.handOver("too early")).toBeNull();
