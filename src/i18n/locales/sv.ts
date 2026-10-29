@@ -186,6 +186,12 @@ export const sv: Catalog = {
     takenUp: "Har tagits upp av den pågående omgången.",
     neverTaken: "Omgången tog slut innan detta togs upp. Skicka det igen.",
     sendNow: "Skicka nu",
+    takeBack: "Ta tillbaka",
+    takenBack: "Tillbakataget. Claude såg det aldrig.",
+    tooLate: "För sent: Claude har redan tagit upp det.",
+    nothingToTakeBack:
+      "Inget att ta tillbaka: meddelandet väntar inte längre, eftersom omgången har tagit upp det eller är slut.",
+    cannotTakeBack: "Den Claude Code som bryggan kör kan inte ta tillbaka ett meddelande. Stopp avslutar omgången i stället.",
     sent: "Skickat nu. Steget Claude höll på med avbröts så att den kunde läsa ditt meddelande, och den fortsätter därifrån. Agenter och kommandon i bakgrunden som den hade igång fick fortsätta köra; ett som den väntade på stoppades.",
     nothingWaiting: "Inget väntar: den pågående omgången har redan tagit upp ditt meddelande.",
     notRunning: "Ingen omgång körs här längre, så det finns inget att avbryta.",

@@ -187,6 +187,12 @@ export const es: Catalog = {
     takenUp: "Retomado por el turno en marcha.",
     neverTaken: "El turno terminó antes de retomar esto. Envíalo otra vez.",
     sendNow: "Enviar ahora",
+    takeBack: "Retirar",
+    takenBack: "Retirado. Claude nunca lo vio.",
+    tooLate: "Demasiado tarde: Claude ya lo ha retomado.",
+    nothingToTakeBack: "No hay nada que retirar: el mensaje ya no está esperando, porque el turno lo ha retomado o ha terminado.",
+    cannotTakeBack:
+      "El Claude Code con el que funciona este puente no puede retirar un mensaje. Detener termina el turno en su lugar.",
     sent: "Enviado ahora. El paso en el que estaba Claude se cortó para que pudiera leer tu mensaje, y sigue desde ahí. Los agentes y comandos en segundo plano que tenía en marcha siguen en marcha; el que estaba esperando se detuvo.",
     nothingWaiting: "No hay nada esperando: el turno en marcha ya ha retomado tu mensaje.",
     notRunning: "Aquí ya no hay ningún turno en marcha, así que no hay nada que interrumpir.",

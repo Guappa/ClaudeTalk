@@ -839,6 +839,14 @@ while the message is still waiting; once taken up there is nothing to hurry, and
 it says so. A turn that ends
 with a message still waiting runs it next without being asked.
 
+Beside it, **Take back** withdraws the message while it is still waiting, as
+the terminal's up arrow does: Claude never sees it, the notice says it was
+taken back, and your message is marked as stopped and left in the channel, so
+its text is still there to copy, change and send again. Once Claude has taken
+it up, or has it in the step it is about to start, it is too late, and the
+button says so. Taking back relies on a request Claude Code accepts but its SDK
+does not list yet; a build without it says that it cannot take a message back.
+
 What is not a plain message still queues and runs as its own turn when the
 current one finishes: a slash command, anything started by a bridge command
 such as `/run` or `/ask`, and a message that arrives before the turn is under

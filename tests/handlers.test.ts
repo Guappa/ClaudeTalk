@@ -32,6 +32,7 @@ import {
   createResumeId,
   sendAnywayActionId,
   sendNowActionId,
+  takeBackActionId,
   sendWaitActionId,
 } from "../src/discord/menus.ts";
 import type { SessionRecord } from "../src/sessions/index.ts";
@@ -1061,6 +1062,30 @@ describe("/unbind", () => {
     await handleButton(bridge, press.interaction);
     expect(place.wasDeleted()).toBe(false);
     expect(press.replies.at(-1)).toContain("bound to a conversation again");
+  });
+});
+
+describe("Take back", () => {
+  it("withdraws the message the button names and says how it went", async () => {
+    const bridge = await testBridge();
+    const uuid = "0b7e6a52-3f1d-4c8e-9a2b-5d6c7e8f9a01";
+    const withdrawn = vi.spyOn(bridge.flow, "takeBack").mockResolvedValue("withdrawn");
+    const press = fakePress(fakeChannel("tb1"), OWNER, takeBackActionId(SESSION, uuid));
+
+    await handleButton(bridge, press.interaction);
+
+    expect(withdrawn).toHaveBeenCalledWith(SESSION, uuid);
+    expect(press.whispers.at(-1)).toContain("Claude never saw it");
+  });
+
+  it("says plainly when it is too late", async () => {
+    const bridge = await testBridge();
+    vi.spyOn(bridge.flow, "takeBack").mockResolvedValue("taken");
+    const press = fakePress(fakeChannel("tb2"), OWNER, takeBackActionId(SESSION, "0b7e6a52-3f1d-4c8e-9a2b-5d6c7e8f9a02"));
+
+    await handleButton(bridge, press.interaction);
+
+    expect(press.whispers.at(-1)).toContain("Too late");
   });
 });
 

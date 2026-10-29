@@ -33,6 +33,7 @@ const endings = vi.hoisted(() => new Map<string, unknown>());
 const asks = vi.hoisted(() => new Map<string, unknown[]>());
 // Prompts whose mocked turn refuses to be interrupted.
 const uninterruptible = vi.hoisted(() => new Set<string>());
+const unwithdrawable = vi.hoisted(() => new Set<string>());
 // Events a mocked turn sends a moment after it starts, keyed by its prompt.
 const later = vi.hoisted(() => new Map<string, unknown>());
 // Mocked turns that run until the test lets them end or stops them, keyed by prompt: one that ends on a timer races whatever a test does while it runs.
@@ -79,6 +80,10 @@ vi.mock("../src/claude/runner.ts", async (importOriginal) => {
         interrupt: async () => {
           asked.push(`interrupt ${request.prompt}`);
           return !uninterruptible.has(request.prompt);
+        },
+        withdraw: async (uuid: string) => {
+          asked.push(`withdraw ${uuid}`);
+          return unwithdrawable.has(request.prompt) ? "taken" : "withdrawn";
         },
         done: over.promise.then(() => endings.get(request.prompt) ?? { ok: true, text: `echo ${request.prompt}` }),
       };
@@ -419,7 +424,7 @@ describe("TurnFlow", () => {
     await vi.waitFor(() => expect(asked).toContain("handOver and this too"));
     expect(started).not.toContain("and this too");
     expect(asks[0]).toContain("Handed to the running turn");
-    expect(asks[0]).toContain("[Send now]");
+    expect(asks[0]).toContain("[Send now,Take back]");
     expect(states).toEqual(["queued"]);
     expect(flow.queueDepth("s13")).toBe(1);
 
@@ -433,6 +438,53 @@ describe("TurnFlow", () => {
     expect(states).toEqual(["queued", "running", "done"]);
     expect(closed).toEqual(["Taken up by the running turn."]);
     expect(await flow.sendNow("s13")).toBe("not-running");
+  });
+
+  it("takes back a message waiting on the running turn: its notice says so and it settles as never taken", async () => {
+    const flow = makeFlow();
+    const letEnd = keepRunning("long errand");
+    const running = flow.run("s40", cwd, "long errand", {}, recordingSink(), { resume: true });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const states: string[] = [];
+    const closed: string[] = [];
+    const sink = {
+      ...quietSink(),
+      ask: async () => ({ close: async (outcome: string) => void closed.push(outcome) }),
+    };
+    const folded = flow.run("s40", cwd, "scratch that", {}, sink, {
+      resume: true,
+      foldable: true,
+      onState: async (state) => void states.push(state),
+    });
+    await vi.waitFor(() => expect(asked).toContain("handOver scratch that"));
+
+    expect(await flow.takeBack("s40", "uuid-scratch that")).toBe("withdrawn");
+    expect(asked).toContain("withdraw uuid-scratch that");
+    expect(await folded).toBe(false);
+    expect(closed).toEqual(["Taken back. Claude never saw it."]);
+    expect(states).toEqual(["queued", "stopped"]);
+    expect(await flow.takeBack("s40", "uuid-scratch that")).toBe("gone");
+    expect(await flow.sendNow("s40")).toBe("nothing-waiting");
+    letEnd();
+    await running;
+  });
+
+  it("says it is too late once the session has the message in a step, and leaves it waiting to be taken up", async () => {
+    const flow = makeFlow();
+    unwithdrawable.add("busy errand");
+    const letEnd = keepRunning("busy errand");
+    const running = flow.run("s41", cwd, "busy errand", {}, recordingSink(), { resume: true });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const folded = flow.run("s41", cwd, "already read", {}, quietSink(), { resume: true, foldable: true });
+    await vi.waitFor(() => expect(asked).toContain("handOver already read"));
+
+    expect(await flow.takeBack("s41", "uuid-already read")).toBe("taken");
+    taken.get("busy errand")?.("uuid-already read");
+    letEnd();
+    await running;
+    expect(await folded).toBe(true);
+    unwithdrawable.delete("busy errand");
   });
 
   // Send now asks first while one of these is open, so the turn has to see each one start and end.

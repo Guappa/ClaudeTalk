@@ -32,7 +32,7 @@ Claude Code's own transcript, so nothing here owns it.
 | Takeover | A conversation left open in an idle terminal is freed from Discord with `/takeover`, and the message you sent runs. |
 | Live trail | What Claude is doing as it does it: commands, edits, searches, and a line per agent with how it ended. `/trail` hides the kinds you do not want, for one conversation or for all. |
 | Question menus | Claude's questions arrive as select menus with the choices it offered and a field for your own words. |
-| Stop and steer | A **Stop** button ends a turn. A message sent while one runs is handed to it and taken up at its next step, or at once with **Send now**. |
+| Stop and steer | A **Stop** button ends a turn. A message sent while one runs is handed to it and taken up at its next step, at once with **Send now**, or not at all with **Take back** while it is still waiting. |
 | Pings | A question or approval request always pings, headed so it stands out; a long turn's answer or failure pings only if you have been away. |
 | Scheduled tasks | `/loop`, reminders and Claude's own scheduled tasks run as they would in an open terminal: the bridge sends each prompt into the conversation when it falls due, with no process kept waiting in between. |
 | Wake from the host | `npm run wake -- <session id> <prompt>` lets a timer or a script on the host start a turn in a bound conversation, so a check that finds nothing costs nothing. See [Waking it from the host](docs/REFERENCE.md#waking-it-from-the-host). |

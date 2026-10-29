@@ -23,7 +23,7 @@ import { cancelRun, confirmRun } from "../commands/run.ts";
 import { runSkill } from "../commands/skills.ts";
 import { acknowledgeQuietly, respond, respondQuietly, settleMenu } from "../respond.ts";
 import { nameForDiscord } from "../outgoing.ts";
-import { describeSendNow, describeStop, describeStopAgents, describeStopTurn } from "../turnFlow.ts";
+import { describeSendNow, describeStop, describeStopAgents, describeStopTurn, describeTakeBack } from "../turnFlow.ts";
 import { formatElapsed } from "../statusMessage.ts";
 import { canRunCommand } from "../../access.ts";
 import { MODAL_TEXT_CHARS } from "../limits.ts";
@@ -55,6 +55,7 @@ const COMMAND_OF: Partial<Record<MenuAction["kind"], string>> = {
   "turn-stop-agents": "stop",
   "turn-send-now": "stop",
   "turn-send-wait": "stop",
+  "turn-take-back": "stop",
 };
 
 // A control is checked on its own press, not on who could see the message it sits on; false once the presser has been told it is not theirs.
@@ -267,6 +268,12 @@ async function deleteUnboundChannel(bridge: Bridge, interaction: ButtonInteracti
   }
 }
 
+async function takeBack(bridge: Bridge, interaction: ButtonInteraction, action: Action<"turn-take-back">) {
+  await acknowledgeQuietly(interaction);
+  const outcome = await bridge.flow.takeBack(action.sessionId, action.uuid);
+  await respondQuietly(interaction, describeTakeBack(bridge.language.say, outcome));
+}
+
 export async function handleButton(bridge: Bridge, interaction: ButtonInteraction): Promise<void> {
   const action = parseCustomId(interaction.customId);
   if (!(await mayPress(bridge, interaction, action))) return;
@@ -283,6 +290,8 @@ export async function handleButton(bridge: Bridge, interaction: ButtonInteractio
       return await sendNow(bridge, interaction, action);
     case "turn-send-wait":
       return await waitForCall(bridge, interaction, action);
+    case "turn-take-back":
+      return await takeBack(bridge, interaction, action);
     case "purge-cancel":
       return await cancelPurge(bridge, interaction);
     case "purge-confirm":
