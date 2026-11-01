@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits, Options } from "discord.js";
+import { Client, Events, GatewayIntentBits, Options, Partials } from "discord.js";
 import { loadConfig } from "./config.ts";
 import { acquireInstanceLock, lockPathBeside, STALE_AFTER_MS } from "./instanceLock.ts";
 import { RESTART_EXIT_CODE, takeStopRequest, watchForStop, whenIdle, type StopMode, type StopRequest } from "./stopSignal.ts";
@@ -39,6 +39,8 @@ await sweepAttachments();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+  // A message queued behind a long turn outlives the cache, and only a partial tells of its deletion.
+  partials: [Partials.Message],
   // Text the bridge posts can quote a transcript, and a mention quoted there must not ping; a message meant to reach someone names them itself.
   allowedMentions: { ...NO_MENTIONS, repliedUser: false },
   // Nothing here reads a cached message: /purge and /ask fetch, and a reply is fetched by id.
@@ -152,6 +154,12 @@ client.on(Events.GuildCreate, (guild) => {
 client.on(Events.MessageCreate, (message) => {
   handleMessage(bridge, message).catch((error: unknown) => {
     console.error("message handler failed", error);
+  });
+});
+
+client.on(Events.MessageDelete, (message) => {
+  void bridge.flow.withdrawDeleted(message.id).catch((error: unknown) => {
+    console.error("taking back a deleted message failed", error);
   });
 });
 

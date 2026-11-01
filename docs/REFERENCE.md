@@ -858,7 +858,9 @@ the terminal's up arrow does: Claude never sees it, the notice says it was
 taken back, and your message is marked as stopped and left in the channel, so
 its text is still there to copy, change and send again. Once Claude has taken
 it up, or has it in the step it is about to start, it is too late, and the
-button says so. Taking back relies on a request Claude Code accepts but its SDK
+button says so. Deleting a message that is still waiting does the same as the
+button, here and for a message queued behind a turn; deleting one Claude has
+already taken up changes nothing, and that turn carries on. Taking back relies on a request Claude Code accepts but its SDK
 does not list yet; a build without it says that it cannot take a message back.
 
 What is not a plain message still queues and runs as its own turn when the

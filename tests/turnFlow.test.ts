@@ -505,6 +505,34 @@ describe("TurnFlow", () => {
     expect([...new Set(states)]).toEqual(["queued", "stopped"]);
   });
 
+  it("takes a waiting message back when it is deleted, whether handed over or queued", async () => {
+    const flow = makeFlow();
+    const letEnd = keepRunning("a long job");
+    const running = flow.run("s46", cwd, "a long job", {}, recordingSink(), { resume: true });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const closed: string[] = [];
+    const sink = { ...quietSink(), ask: async () => ({ close: async (outcome: string) => void closed.push(outcome) }) };
+    const handed = flow.run("s46", cwd, "joined it", {}, sink, { resume: true, foldable: true, sourceMessageId: "m-handed" });
+    await vi.waitFor(() => expect(asked).toContain("handOver joined it"));
+    const queued = flow.run("s46", cwd, "/behind-it", {}, sink, { resume: true, sourceMessageId: "m-queued" });
+    await vi.waitFor(() => expect(flow.queueDepth("s46")).toBe(2));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    await flow.withdrawDeleted("someone-elses-message");
+    expect(closed).toEqual([]);
+    await flow.withdrawDeleted("m-handed");
+    await flow.withdrawDeleted("m-queued");
+
+    expect(await handed).toBe(false);
+    expect(asked).toContain("withdraw uuid-joined it");
+    expect(closed).toEqual(["Taken back. Claude never saw it.", "Taken back. Claude never saw it."]);
+    letEnd();
+    await running;
+    expect(await queued).toBe(false);
+    expect(started).not.toContain("/behind-it");
+  });
+
   // The button can be pressed in the moment between the notice posting and the bridge holding its handle.
   it("closes a queued notice that lands after its message was already taken back", async () => {
     const flow = makeFlow();
