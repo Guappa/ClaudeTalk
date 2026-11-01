@@ -899,10 +899,38 @@ describe("secrets on their way to Discord", () => {
     expect(shown).not.toContain(second.slice(0, 16));
   });
 
+  it("takes the body of an encrypted key and a PGP block, past their headers", () => {
+    const line = "a1B2c3D4e5F6g7H8".repeat(4);
+    const encrypted = joined(
+      "-----BEGIN ",
+      "RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,0A1B\n\n",
+      line,
+      "\n-----END ",
+      "RSA PRIVATE KEY-----",
+    );
+    const pgp = joined(
+      "-----BEGIN ",
+      "PGP PRIVATE KEY BLOCK-----\nVersion: GnuPG v2\n\n",
+      line,
+      "\n-----END ",
+      "PGP PRIVATE KEY BLOCK-----",
+    );
+    for (const block of [encrypted, pgp]) expect(redactSecrets(block)).not.toContain(line.slice(0, 16));
+  });
+
+  it("does not stop at a key block far deeper or wider than any real one", () => {
+    const begin = joined("-----BEGIN ", "PRIVATE KEY-----");
+    const deep = `${begin}\n${" ".repeat(16)}${"a1B2c3D4e5F6g7H8".repeat(4)}`;
+    expect(redactSecrets(deep)).not.toContain("a1B2c3D4e5F6g7H8");
+    const wide = `${begin}\n${`${"a1B2".repeat(512)}\n`.repeat(4000)}`;
+    expect(() => redactSecretsFrom(wide, [])).not.toThrow();
+  });
+
   it("keeps what names the secret and takes the value", () => {
     const value = "a1B2c3D4e5F6g7H8i9J0";
     expect(redactSecrets(`API_KEY=${value}`)).toBe("API_KEY=[redacted]");
     expect(redactSecrets(`password: "${value}"`)).toBe('password: "[redacted]"');
+    expect(redactSecrets(`token = ${value}.`)).toBe("token = [redacted].");
     expect(redactSecrets(`Authorization: Bearer ${value}`)).toBe("Authorization: Bearer [redacted]");
     expect(redactSecrets("postgres://me:hunter2hunter@db.example.com/app")).toBe("postgres://me:[redacted]@db.example.com/app");
   });
