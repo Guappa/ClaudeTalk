@@ -186,12 +186,13 @@ export class AgentBoard {
     return toolUseId !== null && this.byToolUse.has(toolUseId);
   }
 
-  // Only where no side room can be had; with one, the roster is the single place agents are shown.
+  // The whole roster only where no side room can be had; with one, a line that leads to it while agents are running.
   block(): string {
     const all = [...this.agents.values()];
-    if (all.length === 0 || this.detail) return "";
-    if (!this.opened && this.sink.openDetail) return "";
     const running = all.filter((agent) => agent.state === "running" || this.waiting(agent));
+    if (this.detail) return this.pointer(running.length);
+    if (all.length === 0) return "";
+    if (!this.opened && this.sink.openDetail) return "";
     const tally = [
       this.tallied("agents.tallyRunning", running.length),
       this.tallied("agents.tallyDone", all.filter((agent) => agent.state === "completed" && !this.waiting(agent)).length),
@@ -201,6 +202,12 @@ export class AgentBoard {
     const lines = running.slice(0, MAX_LISTED).map((agent) => `- ${this.line(agent)}`);
     if (running.length > MAX_LISTED) lines.push(`- ${this.say("agents.more", { quantity: running.length - MAX_LISTED })}`);
     return [this.say("agents.tally", { tally: tally.join(" · ") }), ...lines].join("\n");
+  }
+
+  // The room hangs off the message that first needed it, which a long turn leaves far up the channel.
+  private pointer(running: number): string {
+    if (running === 0 || !this.detail?.id) return "";
+    return this.say("agents.tally", { tally: `${this.tallied("agents.tallyRunning", running)} · <#${this.detail.id}>` });
   }
 
   private tallied(key: TallyKey, quantity: number): string {

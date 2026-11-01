@@ -556,6 +556,26 @@ describe("agents in a turn", () => {
     expect(lines[1]).toBe("- general-purpose · Part 0 · 0 tools · 0s");
   });
 
+  // The thread hangs off the message that first needed it, which a long turn leaves far up the channel.
+  it("leads to the side room from the trail while an agent runs, and says nothing once none does", async () => {
+    const recording = recordingSink();
+    const openDetail = recording.openDetail!;
+    const sink = {
+      ...recording,
+      openDetail: async (title: string) => {
+        const room = await openDetail(title);
+        return room ? { ...room, id: "thread-1" } : room;
+      },
+    };
+    const agents = board(sink);
+    feed(agents, started("t1", "use1", "Audit the access checks", "Explore"));
+    await agents.flush();
+    expect(agents.block()).toBe("**Agents** · 1 running · <#thread-1>");
+
+    feed(agents, notified("t1", "completed"));
+    expect(agents.block()).toBe("");
+  });
+
   // As in the terminal: that an agent is working, on what, and what it has spent. Never its own edits or report.
   it("keeps one roster message in the side room, every agent in it, rewritten as they change", async () => {
     const sink = recordingSink();
