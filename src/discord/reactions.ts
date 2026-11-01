@@ -17,7 +17,9 @@ export type StateMarker = (state: TurnState) => Promise<void>;
 // One reaction at a time on the message that started the turn; a reaction that fails is cosmetic, never the turn's problem.
 export function reactionMarker(message: Message, botId: string): StateMarker {
   let current: MessageReaction | null = null;
-  return async (state) => {
+  // In turn, or a state set while the last is still on its way finds nothing to take off and both stay.
+  let settled = Promise.resolve();
+  const show = async (state: TurnState): Promise<void> => {
     const next = STATE_EMOJI[state];
     if (current?.emoji.name === next) return;
     try {
@@ -27,5 +29,9 @@ export function reactionMarker(message: Message, botId: string): StateMarker {
     } catch {
       current = null;
     }
+  };
+  return (state) => {
+    settled = settled.then(() => show(state));
+    return settled;
   };
 }

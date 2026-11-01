@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import type { Message } from "discord.js";
+import { describe, it, expect, vi } from "vitest";
 import { attachmentsRoot, longTmpDir } from "../src/platform.ts";
 import { randomUUID } from "node:crypto";
 import { addressesBot, addressesSomeoneElse, shouldQuoteReplied, type Addressing } from "../src/discord/addressing.ts";
@@ -20,6 +21,7 @@ import {
 import { nothingToSend } from "../src/discord/handlers/message.ts";
 import { sayIn } from "../src/i18n/index.ts";
 import { attributionOnly, buildContext, composePrompt, noContext, stripBotMention } from "../src/discord/context.ts";
+import { STATE_EMOJI, reactionMarker } from "../src/discord/reactions.ts";
 
 const say = sayIn("en");
 
@@ -315,5 +317,40 @@ describe("a download that fails is named, not skipped in silence", () => {
     expect(failed).toEqual(["shot.png"]);
     expect(describeUnfetched(say, failed)).toContain("`shot.png`");
     expect(describeUnfetched(say, [])).toBeNull();
+  });
+});
+
+describe("the reaction on a message", () => {
+  function reactable() {
+    const shown: string[] = [];
+    const pending: Array<() => void> = [];
+    const message = {
+      react: async (emoji: string) => {
+        await new Promise<void>((resolve) => pending.push(resolve));
+        shown.push(emoji);
+        return {
+          emoji: { name: emoji },
+          users: { remove: async () => void shown.splice(shown.indexOf(emoji), 1) },
+        };
+      },
+    } as unknown as Message;
+    return { message, shown, pending };
+  }
+
+  // A message can be taken up while its clock is still on the way to Discord, and a mark set on top of one still arriving would stay.
+  it("shows one state at a time when a second arrives before the first has landed", async () => {
+    const { message, shown, pending } = reactable();
+    const mark = reactionMarker(message, "bot");
+
+    const queued = mark("queued");
+    const running = mark("running");
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    pending.shift()!();
+    await queued;
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    pending.shift()!();
+    await running;
+
+    expect(shown).toEqual([STATE_EMOJI.running]);
   });
 });
