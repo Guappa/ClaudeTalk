@@ -9,14 +9,16 @@ const LOOKS_LIKE_SECRET = /^(?=\S*\d)(?=\S*[A-Za-z])(?!\/)(?![a-z][a-z0-9+.-]*:\
 // A key can follow a line break written into a JSON string, whose last letter is no reason to doubt it.
 const STARTS = "(?:(?<![A-Za-z0-9])|(?<=\\\\[nrt]))";
 // A key block arrives indented, quoted in a reply, flattened to spaces or written into JSON, and its lines are as long as its tool made them.
-const KEY_LINE_BREAK = "(?:\\s|\\\\[rn]|>){1,8}";
+const KEY_LINE_BREAK = "(?:\\s|\\\\{1,2}[rn]|>){1,32}";
+// An encrypted key and a PGP block carry a few lines of headers ahead of the body.
+const KEY_HEADERS = `(?:${KEY_LINE_BREAK}[A-Za-z-]{2,32}: ?[^\\r\\n\\\\]{0,128}){0,8}`;
 const KEY_FOOTER = "-----END [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----";
 
 // What leads up to a secret and stays readable goes in a group named lead. A file of up to the attachment limit passes through these, so each is anchored and bounded: an open-ended run can stall the bridge or overflow the matcher.
 const SHAPES: readonly RegExp[] = [
   // Lines of a full length are the body, so a header only mentioned in prose or a parser's source takes nothing with it.
   new RegExp(
-    `-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----(?:${KEY_LINE_BREAK}(?!-----)[A-Za-z0-9+/=]{16,8192}){1,4096}(?:${KEY_LINE_BREAK}(?!-----)[A-Za-z0-9+/=]{1,15}(?=${KEY_LINE_BREAK}${KEY_FOOTER}))?(?:${KEY_LINE_BREAK}${KEY_FOOTER})?`,
+    `-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----${KEY_HEADERS}(?:${KEY_LINE_BREAK}(?!-----)[A-Za-z0-9+/=]{16,8192}){1,512}(?:${KEY_LINE_BREAK}(?!-----)[A-Za-z0-9+/=]{1,15}(?=${KEY_LINE_BREAK}${KEY_FOOTER}))?(?:${KEY_LINE_BREAK}${KEY_FOOTER})?`,
     "g",
   ),
   new RegExp(`${STARTS}sk-ant-[A-Za-z0-9_-]{20,4096}`, "g"),
@@ -41,7 +43,7 @@ const SHAPES: readonly RegExp[] = [
   /(?<lead>(?<![A-Za-z])Basic\s{1,4})(?=.[a-z+/]{0,64}[A-Z0-9])[A-Za-z0-9+/]{16,4096}={0,2}/g,
   /(?<lead>(?<![a-z0-9+.-])[a-z][a-z0-9+.-]{0,30}:\/\/[^\s/:@]{1,256}:)[^\s/@]{3,256}(?=@)/gi,
   // Letters and two digits at least, or every long setting would go; what a dot follows is a file, what a bracket follows is a call.
-  /(?<lead>(?:api[_-]?key|secret(?:[_-]?key)?|token|password|passwd|pwd)["'`*]{0,3}\s{0,4}[:=]\s{0,4}["'`]?)(?!\/)(?=[^\s"'`]{0,256}\d[^\s"'`]{0,256}\d)(?=[^\s"'`]{0,256}[A-Za-z])[A-Za-z0-9+/=_!@#$%^&*-]{16,512}(?![\w./()])/gi,
+  /(?<lead>(?:api[_-]?key|secret(?:[_-]?key)?|token|password|passwd|pwd)["'`*]{0,3}\s{0,4}[:=]\s{0,4}["'`]?)(?!\/)(?=[^\s"'`]{0,256}\d[^\s"'`]{0,256}\d)(?=[^\s"'`]{0,256}[A-Za-z])[A-Za-z0-9+/=_!@#$%^&*-]{16,512}(?![\w/()]|\.\w)/gi,
 ];
 
 function hide(...found: unknown[]): string {
