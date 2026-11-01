@@ -537,7 +537,9 @@ When Claude hands work to agents, they are shown the way the terminal shows
 them, that each is working, on what, and what it has spent, and in one place
 only: a thread on the progress message, opened by the first agent and named
 after what was asked of the turn, so a turn without agents never makes one and
-one turn's thread can be told from another's. The thread holds one message kept up to date,
+one turn's thread can be told from another's. A long turn leaves that message
+far up the channel, so while any agent runs the trail keeps a line with how
+many are running and a link to the thread. The thread holds one message kept up to date,
 ten agents to a message, costing the model nothing since it is drawn from events
 Claude Code already sends:
 

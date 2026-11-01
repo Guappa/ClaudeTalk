@@ -196,6 +196,7 @@ export function channelSink(channel: SendableChannels, options: SinkOptions = {}
           autoArchiveDuration: ThreadAutoArchiveDuration.OneHour,
         });
         return {
+          id: thread.id,
           async post(text: string) {
             const sent = await thread.send({ content: forDiscord(text), allowedMentions: NO_MENTIONS });
             return {

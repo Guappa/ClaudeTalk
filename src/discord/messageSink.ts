@@ -42,6 +42,8 @@ export interface DetailPost {
 
 // A side room off the trail for detail that would swamp it; Discord draws it as a thread on the progress message.
 export interface DetailSink {
+  // What the trail links to, once the message that holds the room has scrolled out of sight.
+  id?: string;
   post(text: string): Promise<DetailPost>;
 }
 
