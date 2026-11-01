@@ -6,6 +6,7 @@ import { truncate } from "../text.ts";
 import { fitForDiscord } from "./outgoing.ts";
 import { questionPickId, questionSkipId, questionSubmitId } from "./menus.ts";
 import type { Delivery, MessageSink, SinkAction, SinkMenu } from "./messageSink.ts";
+import { redactSecrets } from "./redaction.ts";
 
 // A question deserves more thought than a permission, and a phone is often the thing answering it.
 export const QUESTION_TIMEOUT_MS = 10 * 60_000;
@@ -32,7 +33,7 @@ function describeQuestion(say: Say, question: Question, index: number): string {
   const asked = { number: index + 1, header: question.header, question: question.question };
   const lines: string[] = [say(question.multiSelect ? "questions.questionPickAny" : "questions.question", asked)];
   for (const option of question.options) {
-    if (option.preview) lines.push(`${option.label}:\n\`\`\`\n${truncate(option.preview, PREVIEW_LIMIT)}\n\`\`\``);
+    if (option.preview) lines.push(`${option.label}:\n\`\`\`\n${truncate(redactSecrets(option.preview), PREVIEW_LIMIT)}\n\`\`\``);
   }
   return lines.join("\n");
 }

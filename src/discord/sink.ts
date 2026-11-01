@@ -210,7 +210,7 @@ export function channelSink(channel: SendableChannels, options: SinkOptions = {}
       }
     },
     async sendFiles(text: string, files: SinkFile[]): Promise<void> {
-      const attachments = files.map((file) => new AttachmentBuilder(file.data, { name: file.name }));
+      const attachments = files.map((file) => new AttachmentBuilder(file.data, { name: nameForDiscord(file.name) }));
       await post({ content: forDiscord(text), allowedMentions, files: attachments });
     },
   };

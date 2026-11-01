@@ -192,8 +192,11 @@ application anyway. For containment, run the bridge in a container or VM.
 **Everything a conversation shows is posted to Discord and stored there.** That
 is the prompts and replies, and the trail too: each command's full text, file
 paths, every edit as a diff, searches and fetched addresses, and every file
-Claude sends back. A secret Claude repeats, writes or attaches becomes a Discord
-message. Discord holds it without end-to-end encryption, and server
+Claude sends back. Common key formats and the bridge's own secrets are swapped
+for `[redacted]`, and a text file holding one is kept back, but that works by
+shape and is a safety net, not a guarantee: any other secret Claude repeats,
+writes or attaches becomes a Discord message. Discord holds it without
+end-to-end encryption, and server
 administrators can read every channel. Deleting a message takes it out of the
 channel, not necessarily off Discord's servers; how long Discord keeps anything
 is set by [its privacy policy](https://discord.com/privacy).

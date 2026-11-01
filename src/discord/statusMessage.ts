@@ -1,8 +1,7 @@
-import { redactHome } from "../displayPath.ts";
 import type { Say } from "../i18n/index.ts";
 import { truncate } from "../text.ts";
 import type { MessageSink, SinkAction } from "./messageSink.ts";
-import { forDiscord, splitForDiscord } from "./outgoing.ts";
+import { forDiscord, redacted, splitForDiscord } from "./outgoing.ts";
 import { DISCORD_MESSAGE_LIMIT } from "./limits.ts";
 import { defuseStrayMarkup } from "./strayMarkup.ts";
 import { convertTables } from "./tables.ts";
@@ -122,7 +121,7 @@ function fitsInOne(say: Say, notes: string[], elapsedMs: number, steps: number, 
 
 // A remark keeps its paragraphs and code blocks, the way the terminal shows it; only stray blank lines go.
 function tidy(text: string): string {
-  return redactHome(text)
+  return redacted(text)
     .replace(/\r\n/g, "\n")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")

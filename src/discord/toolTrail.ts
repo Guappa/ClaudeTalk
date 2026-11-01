@@ -1,6 +1,7 @@
 import { displayPath } from "../displayPath.ts";
 import type { Say } from "../i18n/index.ts";
 import { truncate } from "../text.ts";
+import { redactSecrets } from "./redaction.ts";
 
 // What a reader can switch off in the trail: tool calls grouped by what they do, since nobody thinks of them by tool name.
 export const TRAIL_KINDS = ["edits", "commands", "reads", "web", "agents", "todos", "other"] as const;
@@ -47,8 +48,16 @@ function markOf(name: string): string | null {
 }
 
 // What the terminal shows for a tool call, drawn from the call's own input, so it costs the model nothing: every call gets a line, as in the terminal, so nothing a turn does goes unseen.
+function withoutSecrets(value: unknown): unknown {
+  if (typeof value === "string") return redactSecrets(value);
+  if (Array.isArray(value)) return value.map(withoutSecrets);
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, withoutSecrets(inner)]));
+}
+
 export function describeToolUse(say: Say, name: string, input: Record<string, unknown>): string | null {
-  const line = toolLine(say, name, input);
+  // Before anything is shortened: a key the trail cuts in half no longer looks like one to the gate.
+  const line = toolLine(say, name, withoutSecrets(input) as Record<string, unknown>);
   const mark = markOf(name);
   return line && mark ? `${mark} ${line}` : line;
 }

@@ -1,22 +1,28 @@
 import type { Message, SendableChannels } from "discord.js";
 import { redactHome } from "../displayPath.ts";
 import { DISCORD_MESSAGE_LIMIT } from "./limits.ts";
+import { redactSecrets } from "./redaction.ts";
 import { chunkForDiscord } from "./renderer.ts";
 import { defuseStrayMarkup } from "./strayMarkup.ts";
 
 const TIGHTEN_BY = 100;
 
-// The one gate between the bridge and Discord: no account's path and no stray markup gets past it.
+// What Discord may be shown of a text: no secret the bridge can recognise and no account's path.
+export function redacted(text: string): string {
+  return redactHome(redactSecrets(text));
+}
+
+// The one gate between the bridge and Discord: nothing redacted and no stray markup gets past it.
 export function forDiscord(text: string): string {
-  return defuseStrayMarkup(redactHome(text));
+  return defuseStrayMarkup(redacted(text));
 }
 
 // The gate escapes stray markers, which lengthens a text, so the split is tightened until every piece still fits after it; a piece over the limit is refused by Discord and nothing is posted.
 export function splitForDiscord(text: string, room: number = DISCORD_MESSAGE_LIMIT): string[] {
   // Escaping every character doubles a text at most, so a piece half as long as the room always fits once it is through the gate.
   const alwaysFits = Math.floor(room / 2);
-  // Redacted before it is cut: a path that a cut falls inside is no longer a path to the gate, and its tail would be posted.
-  const whole = redactHome(text);
+  // Redacted before it is cut: a path or a key that a cut falls inside is no longer one to the gate, and its tail would be posted.
+  const whole = redacted(text);
   for (let limit = room; limit > alwaysFits; limit -= TIGHTEN_BY) {
     const pieces = chunkForDiscord(whole, limit);
     if (pieces.every((piece) => forDiscord(piece).length <= room)) return pieces;
@@ -33,9 +39,9 @@ export function fitForDiscord(text: string, room: number): string {
   return pieces.length > 1 ? `${first}${CUT_MARK}` : first;
 }
 
-// A name is not drawn as Markdown, so only the path redaction applies to it.
+// A name is not drawn as Markdown, so only redaction applies to it.
 export function nameForDiscord(text: string): string {
-  return redactHome(text);
+  return redacted(text);
 }
 
 // What a menu shows for an option is as public as a message; its value only ever comes back to the bridge.

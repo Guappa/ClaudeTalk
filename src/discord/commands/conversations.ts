@@ -61,10 +61,10 @@ async function createConversationChannel(
 
   try {
     return await guild.channels.create({
-      name: toChannelName(name),
+      name: toChannelName(nameForDiscord(name)),
       type: ChannelType.GuildText,
       parent: target,
-      topic: say("create.topic", { name, cwd: displayPath(cwd) }),
+      topic: nameForDiscord(say("create.topic", { name, cwd: displayPath(cwd) })),
       permissionOverwrites: conversationOverwrites({
         everyoneRoleId: guild.roles.everyone.id,
         botUserId: interaction.client.user.id,

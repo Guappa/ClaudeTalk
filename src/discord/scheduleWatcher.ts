@@ -8,6 +8,7 @@ import { type WakeAnswer, type WakeRequest, takeWakeRequests } from "../wakeRequ
 import { forDiscord } from "./outgoing.ts";
 import { NO_MENTIONS, channelSink } from "./sink.ts";
 import { runConversationTurn } from "./turn.ts";
+import { redactSecrets } from "./redaction.ts";
 
 // Claude Code checks its schedule every second and allows one task a minute at the finest, so half a minute late is within what it promises.
 const CHECK_MS = 30_000;
@@ -41,7 +42,7 @@ async function sendPrompt(
 }
 
 function announceDue(bridge: Bridge, task: ScheduledTask): string {
-  return bridge.language.say("schedules.due", { id: task.id, prompt: truncate(task.prompt, SHOWN_PROMPT_CHARS) });
+  return bridge.language.say("schedules.due", { id: task.id, prompt: truncate(redactSecrets(task.prompt), SHOWN_PROMPT_CHARS) });
 }
 
 export async function fireDueTasks(bridge: Bridge, client: Client): Promise<void> {
@@ -69,7 +70,9 @@ async function deliverWake(bridge: Bridge, client: Client, request: WakeRequest)
   // Asked before anything is posted, so a conversation held elsewhere on the host is told to the script rather than left as a lone announcement.
   const check = bridge.flow.available(request.sessionId, await bridge.sessions.find(request.sessionId));
   if (check.kind !== "ok") return { outcome: "refused", reason: check.message };
-  const announcement = bridge.language.say("schedules.wake", { prompt: truncate(request.prompt, SHOWN_PROMPT_CHARS) });
+  const announcement = bridge.language.say("schedules.wake", {
+    prompt: truncate(redactSecrets(request.prompt), SHOWN_PROMPT_CHARS),
+  });
   void sendPrompt(bridge, channel, conversation, announcement, request.prompt).catch((error: unknown) => {
     console.error(`Wake request ${request.id} for ${request.sessionId} could not be sent: ${errorMessage(error)}`);
   });

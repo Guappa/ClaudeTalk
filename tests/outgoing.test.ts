@@ -8,7 +8,14 @@ import os from "node:os";
 import path from "node:path";
 import { isFromGuild } from "../src/discord/gate.ts";
 import { chunkForDiscord } from "../src/discord/renderer.ts";
-import { choicesForDiscord, fitForDiscord, forDiscord, optionForDiscord, splitForDiscord } from "../src/discord/outgoing.ts";
+import {
+  choicesForDiscord,
+  fitForDiscord,
+  forDiscord,
+  nameForDiscord,
+  optionForDiscord,
+  splitForDiscord,
+} from "../src/discord/outgoing.ts";
 import { StatusMessage } from "../src/discord/statusMessage.ts";
 import {
   collectReferences,
@@ -27,6 +34,8 @@ import { DISCORD_MESSAGE_LIMIT, EMBED_DESCRIPTION_LIMIT, EMBED_FIELD_LIMIT } fro
 import { channelSink } from "../src/discord/sink.ts";
 import { truncate } from "../src/text.ts";
 import { displayPath, homePatterns, redactHome, redactPaths } from "../src/displayPath.ts";
+import { holdsSecretFrom, ownSecrets, redactSecrets, redactSecretsFrom } from "../src/discord/redaction.ts";
+import { describeRequest } from "../src/discord/approvals.ts";
 import { shortPrefix } from "../src/platform.ts";
 import { detail } from "../src/discord/embeds.ts";
 import { sayIn } from "../src/i18n/index.ts";
@@ -833,6 +842,178 @@ describe("convertTables", () => {
     const ragged = ["| Key | Value |", "|---|---|", "| port | 8080 | default |"].join("\n");
     expect(convertTables(ragged)).toBe("- **port**: 8080 · default");
     expect(convertTables("| Key | Value |\n|---|---|")).toBe("- **Key**: Value");
+  });
+});
+
+describe("secrets on their way to Discord", () => {
+  // Assembled at run time, so that the source holds no key for a scanner to find.
+  const joined = (...parts: string[]): string => parts.join("");
+  const keys: Record<string, string> = {
+    anthropic: joined("sk-", "ant-api03-", "a1b2c3d4".repeat(5)),
+    openai: joined("sk-", "proj-", "a1B2c3D4".repeat(5)),
+    github: joined("gh", "p_", "a1B2".repeat(9)),
+    githubOauth: joined("gh", "o_", "a1B2".repeat(9)),
+    githubFineGrained: joined("github", "_pat_", "a1B2_".repeat(8)),
+    gitlab: joined("gl", "pat-", "a1B2c".repeat(5)),
+    aws: joined("AK", "IA", "A1B2C3D4E5F6G7H8"),
+    google: joined("AI", "za", "a1B2c".repeat(7)),
+    slack: joined("xo", "xb-", "1234567890-abcdefghij"),
+    stripe: joined("sk", "_live_", "a1B2c3D4".repeat(3)),
+    npm: joined("np", "m_", "a1B2".repeat(9)),
+    jwt: joined("ey", "JhbGciOiJIUzI1NiJ9.", "ey", "JzdWIiOiIxMjM0In0.", "a1B2c3D4e5F6g7H8"),
+    stripeTest: joined("sk", "_test_", "a1B2c3D4".repeat(3)),
+    discord: joined("M", "1B2c3D4e5".repeat(2), "a1B2c3", ".", "b1c2d3", ".", "e5F6g7H8".repeat(4)),
+  };
+
+  it.each(Object.entries(keys))("takes out a %s key wherever it stands in a text", (_kind, key) => {
+    for (const text of [key, `the key is ${key}, as asked`, `\`${key}\``, `curl -H "x-api-key: ${key}" https://example.com`]) {
+      const shown = redactSecrets(text);
+      expect(shown).not.toContain(key);
+      expect(shown).toContain("[redacted]");
+    }
+  });
+
+  it("takes out a whole private key block, and one a cut has left unfinished", () => {
+    const begin = joined("-----BEGIN ", "OPENSSH PRIVATE KEY-----");
+    const end = joined("-----END ", "OPENSSH PRIVATE KEY-----");
+    const body = ["a1B2c3D4e5F6g7H8".repeat(4), "i9J0k1L2m3N4o5P6".repeat(4), "q7R8s9=="];
+    const lines = body.join("\n");
+    expect(redactSecrets(`before\n${begin}\n${lines}\n${end}\nafter`)).toBe("before\n[redacted]\nafter");
+    expect(redactSecrets(`before\n${begin}\n${body[0]}`)).toBe("before\n[redacted]");
+  });
+
+  it.each([
+    ["indented", (line: string) => `    ${line}`, "\n"],
+    ["quoted in a reply", (line: string) => `> ${line}`, "\n"],
+    ["with trailing spaces", (line: string) => `${line}  `, "\n"],
+    ["flattened to spaces", (line: string) => line, " "],
+    ["written into JSON", (line: string) => line, "\\n"],
+    ["with Windows line ends in JSON", (line: string) => line, "\\r\\n"],
+  ])("leaves nothing of a key block %s", (_how, shaped, join) => {
+    const begin = joined("-----BEGIN ", "OPENSSH PRIVATE KEY-----");
+    const end = joined("-----END ", "OPENSSH PRIVATE KEY-----");
+    const first = "a1B2c3D4e5F6g7H8".repeat(10);
+    const second = "i9J0k1L2m3N4o5P6".repeat(4);
+    const shown = redactSecrets([begin, first, second, end].map(shaped).join(join));
+    expect(shown).not.toContain(first.slice(0, 16));
+    expect(shown).not.toContain(second.slice(0, 16));
+  });
+
+  it("keeps what names the secret and takes the value", () => {
+    const value = "a1B2c3D4e5F6g7H8i9J0";
+    expect(redactSecrets(`API_KEY=${value}`)).toBe("API_KEY=[redacted]");
+    expect(redactSecrets(`password: "${value}"`)).toBe('password: "[redacted]"');
+    expect(redactSecrets(`Authorization: Bearer ${value}`)).toBe("Authorization: Bearer [redacted]");
+    expect(redactSecrets("postgres://me:hunter2hunter@db.example.com/app")).toBe("postgres://me:[redacted]@db.example.com/app");
+  });
+
+  it("leaves alone what only resembles one", () => {
+    const untouched = [
+      "commit 2a45e6d1f50dd99c3eedef915e532a18c282a1b2",
+      "session 00efd55c-9ddd-49d1-981c-8f12e3674d04",
+      "maxTokens: 4096",
+      "token=abcdefghijklmnopqrstuvwxyz",
+      "password: see the docs for this one",
+      "tokenizer: models/config-v12.json",
+      "https://example.com:8443/some/path",
+      "git@github.com:someone/project.git",
+      "ask-the-team-about-a-long-hyphenated-name-for-this-thing",
+      "risk-assessment-for-a-very-long-hyphenated-name-with-no-digits",
+      "tokenizer: bert-base-multilingual-cased-v2",
+      "token_type: long-value-that-is-fine-v2",
+      "from long_pkg.models.long_helpers.module_with_a_long_name import x",
+      "flask-ant-design-admin-template-for-the-dashboard",
+      "task_test_createsAndDeletesItems",
+      "token = base64_encode_url(value)",
+      "verify(token: OAuth2AccessToken)",
+      "pwd: /var/www/site2/current2",
+      "Basic responsibilities",
+      "Basic Responsibilities",
+      joined("-----BEGIN ", "PRIVATE KEY-----"),
+    ];
+    for (const text of untouched) expect(redactSecrets(text)).toBe(text);
+  });
+
+  it("recognises by value what the bridge was started with, in any format, and nothing else from its environment", () => {
+    const own = ownSecrets({
+      MY_API_KEY: "custom!format#value7",
+      PGPASSWORD: "local-db-pass-42",
+      SHORT_TOKEN: "abc1",
+      HOME: "/somewhere/long/enough/to/count9",
+      API_KEY_HEADER: "Authorization",
+      TOKEN_ENDPOINT: "https://auth.example.com/token1",
+      PASSWORD_STORE_DIR: "/opt/store/passwords1",
+      PWD: "/opt/store/project1",
+    });
+    expect(own).toEqual(["custom!format#value7", "local-db-pass-42"]);
+    expect(redactSecretsFrom("got custom!format#value7 back", own)).toBe("got [redacted] back");
+    expect(redactSecretsFrom("/somewhere/long/enough/to/count9", own)).toBe("/somewhere/long/enough/to/count9");
+    expect(holdsSecretFrom("got custom!format#value7 back", own)).toBe(true);
+    expect(holdsSecretFrom("nothing here", own)).toBe(false);
+  });
+
+  // The gate sees a piece at a time, and half a key is not a key to it.
+  it("is redacted before an answer is cut, so a cut that falls inside one leaks none of it", () => {
+    const key = keys.github!;
+    const pieces = splitForDiscord(`${"w".repeat(1985)} ${key} and on`);
+    const posted = pieces.map(forDiscord).join("");
+    expect(pieces.length).toBeGreaterThan(1);
+    expect(posted).not.toContain(key.slice(0, 12));
+    expect(posted).not.toContain(key.slice(-12));
+  });
+
+  it("is redacted in a name, in an approval request and in text the gate is given", () => {
+    const key = keys.anthropic!;
+    expect(nameForDiscord(`run ${key}`)).toBe("run [redacted]");
+    expect(forDiscord(`said ${key}`)).toContain("[redacted]");
+    expect(describeRequest(say, "Bash", { command: `curl -u ${key} https://example.com` })).not.toContain(key);
+  });
+
+  // The trail shortens a command before the gate sees it, and part of a key no longer looks like one.
+  it("is taken out of a tool call before the trail shortens it", () => {
+    const key = keys.github!;
+    const line = describeToolUse(say, "Bash", { command: `${"x".repeat(288)} ${key} tail` }) ?? "";
+    expect(line).not.toContain(key.slice(0, 8));
+  });
+
+  it("is found after a line break written into a JSON string, and in the words around it", () => {
+    expect(redactSecrets(JSON.stringify({ text: `first\n${keys.github}` }))).toContain("[redacted]");
+    expect(redactSecrets(JSON.stringify({ text: `first\n${keys.openai}` }))).not.toContain(keys.openai);
+    expect(redactSecrets(`MY_${keys.github}`)).toContain("[redacted]");
+    expect(redactSecrets("**password**: a1B2c3D4e5F6g7H8i9")).toBe("**password**: [redacted]");
+    expect(redactSecrets("Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l")).toBe("Authorization: Basic [redacted]");
+  });
+
+  it("takes the token out of a webhook address and leaves the address", () => {
+    const hook = joined("https://discord.com/api/webhooks/", "1234567890/", "a1B2c3D4".repeat(4));
+    expect(redactSecrets(hook)).toBe("https://discord.com/api/webhooks/1234567890/[redacted]");
+  });
+
+  it("does not swallow the words after a line that only mentions a key block", () => {
+    const begin = joined("-----BEGIN ", "RSA PRIVATE KEY-----");
+    expect(redactSecrets(`It starts with ${begin} and then the text goes on\n\nNext paragraph`)).toContain("Next paragraph");
+    expect(redactSecrets(`${begin} and then the text goes on`)).toContain("and then the text goes on");
+  });
+
+  // A file of up to the attachment limit passes through these, and one pattern gone quadratic would stall the whole bridge.
+  it("gets through hostile runs of key-like characters in reasonable time", { timeout: 120_000 }, () => {
+    const size = 8_000_000;
+    const repeated = (unit: string): string => unit.repeat(Math.ceil(size / unit.length));
+    const hostile = [
+      repeated("a1B2c3D4-_"),
+      repeated("a."),
+      repeated("eyJ-"),
+      repeated("token"),
+      repeated("secret="),
+      repeated(joined("-----BEGIN ", "PRIVATE KEY-----\n")),
+    ];
+    for (const text of hostile) {
+      const started = performance.now();
+      holdsSecretFrom(text, []);
+      redactSecretsFrom(text, []);
+      expect(performance.now() - started, text.slice(0, 12)).toBeLessThan(8000);
+    }
+    expect(() => redactSecretsFrom(`${joined("gh", "p_")}${"a".repeat(size)}`, [])).not.toThrow();
   });
 });
 

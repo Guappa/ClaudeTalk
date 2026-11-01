@@ -5,6 +5,7 @@ import type { DetailPost, DetailSink, MessageSink } from "./messageSink.ts";
 import { DISCORD_MESSAGE_LIMIT } from "./limits.ts";
 import { fitForDiscord } from "./outgoing.ts";
 import { formatElapsed } from "./statusMessage.ts";
+import { redactSecrets } from "./redaction.ts";
 
 // The trail names this many running agents and counts the rest, so a fan-out cannot swamp the progress message.
 const MAX_LISTED = 4;
@@ -128,7 +129,7 @@ export class AgentBoard {
     agent.durationMs = agent.earlierMs + (event.durationMs ?? this.now() - agent.startedAt);
     this.touch(agent);
     const ended = this.say(ENDED[event.outcome], {
-      name: truncate(agent.description || agent.type, DESCRIPTION_CHARS),
+      name: truncate(redactSecrets(agent.description || agent.type), DESCRIPTION_CHARS),
       elapsed: formatElapsed(this.say, agent.durationMs),
     });
     return `${ENDED_MARK[event.outcome]} ${ended}`;
@@ -310,13 +311,13 @@ export class AgentBoard {
       .filter((agent) => pageOf(agent) === page)
       .map(
         (agent) =>
-          `**${agent.index} · ${truncate(agent.type, ROSTER_TYPE_CHARS)}** · ${truncate(agent.description, ROSTER_DESCRIPTION_CHARS)}\n${this.standing(agent, false)}`,
+          `**${agent.index} · ${truncate(agent.type, ROSTER_TYPE_CHARS)}** · ${truncate(redactSecrets(agent.description), ROSTER_DESCRIPTION_CHARS)}\n${this.standing(agent, false)}`,
       )
       .join("\n\n");
   }
 
   private line(agent: Agent): string {
-    return `${agent.type} · ${truncate(agent.description, DESCRIPTION_CHARS)} · ${this.standing(agent, true)}`;
+    return `${agent.type} · ${truncate(redactSecrets(agent.description), DESCRIPTION_CHARS)} · ${this.standing(agent, true)}`;
   }
 
   // A running time is only true in the trail, which is redrawn every few seconds; the roster is written on change.
@@ -326,7 +327,7 @@ export class AgentBoard {
     if (this.waiting(agent)) return `${this.say("agents.waiting")} · ${spent}`;
     if (agent.state !== "running") return `${this.ending(agent.state, agent.durationMs)} · ${spent}`;
     const doing = agent.activity
-      ? `${truncate(agent.activity, ACTIVITY_CHARS)} · `
+      ? `${truncate(redactSecrets(agent.activity), ACTIVITY_CHARS)} · `
       : live
         ? ""
         : `${this.say("agents.running")} · `;
@@ -347,7 +348,7 @@ export class AgentBoard {
 
 // A turn's agents can each be on something different, so their thread is named after what was asked of the turn as a whole.
 export function agentsTitle(say: Say, asked: string): string {
-  const line = asked.replace(/\s+/g, " ").trim();
+  const line = redactSecrets(asked).replace(/\s+/g, " ").trim();
   return line ? truncate(say("agents.title", { asked: line }), TITLE_CHARS) : say("agents.titleBare");
 }
 
