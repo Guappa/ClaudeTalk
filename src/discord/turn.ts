@@ -11,7 +11,10 @@ import { errorMessage } from "../text.ts";
 
 // What a turn is given, and what of it goes to the flow as it is.
 export interface ConversationTurn
-  extends Pick<TurnOptions, "name" | "fork" | "onSessionId" | "onState" | "asked" | "foldable" | "images" | "unattended"> {
+  extends Pick<
+    TurnOptions,
+    "name" | "fork" | "onSessionId" | "onState" | "asked" | "foldable" | "images" | "unattended" | "sourceMessageId"
+  > {
   prompt: string;
   sink: MessageSink;
   // Called when the turn is refused over something `/takeover` can free, so whoever sent it need not send it again.
@@ -41,6 +44,7 @@ export async function runConversationTurn(bridge: Bridge, conversation: Conversa
     foldable: turn.foldable,
     images: turn.images,
     unattended: turn.unattended,
+    sourceMessageId: turn.sourceMessageId,
     onEvent: turn.fork ? undefined : scheduleKeeper(bridge, conversation.sessionId),
     // Judged once the turn ahead has ended and been marked seen, or its own lines would count as drift.
     beforeTurn: async () => {

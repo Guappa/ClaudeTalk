@@ -85,6 +85,8 @@ export function preflight(say: Say, record: SessionRecord | null): PreflightResu
 }
 
 export interface TurnOptions {
+  // The Discord message this turn came from, so deleting it while it waits takes it back.
+  sourceMessageId?: string;
   // A function is asked when the turn's place in the lane comes up, since a turn ahead of it may be the one that creates the session.
   resume: boolean | (() => boolean);
   name?: string;
@@ -109,6 +111,7 @@ export interface TurnOptions {
 
 // A message handed to a running turn: where it stands, and the notice that offers to hurry it.
 interface Folded {
+  sourceMessageId?: string;
   onState?: StateMarker;
   notice: AskHandle | null;
   taken: boolean;
@@ -119,6 +122,7 @@ interface Folded {
 
 // A message waiting in the lane behind another turn, and the notice that offers to take it back.
 interface Queued {
+  sourceMessageId?: string;
   onState?: StateMarker;
   notice: AskHandle | null;
   // Set when it is taken back while its notice is still on its way, so the notice is closed once it lands.
@@ -520,7 +524,7 @@ export class TurnFlow {
     );
     if (admission.kind === "queued") {
       await options.onState?.("queued");
-      await this.announceQueued(sessionId, ticketId, admission.ahead, sink, options.onState);
+      await this.announceQueued(sessionId, ticketId, admission.ahead, sink, options);
     }
     announced.resolve();
 
@@ -536,10 +540,10 @@ export class TurnFlow {
     ticketId: string,
     ahead: number,
     sink: MessageSink,
-    onState?: StateMarker,
+    options: TurnOptions,
   ): Promise<void> {
     const say = this.say();
-    const entry: Queued = { notice: null, onState, withdrawn: false };
+    const entry: Queued = { sourceMessageId: options.sourceMessageId, notice: null, onState: options.onState, withdrawn: false };
     const waiting = this.queued.get(sessionId) ?? new Map<string, Queued>();
     waiting.set(ticketId, entry);
     this.queued.set(sessionId, waiting);
@@ -593,6 +597,7 @@ export class TurnFlow {
     this.attention.get(sessionId)?.seen();
 
     const entry: Folded = {
+      sourceMessageId: options.sourceMessageId,
       onState: options.onState,
       notice: null,
       taken: false,
@@ -659,6 +664,18 @@ export class TurnFlow {
     await entry.onState?.("stopped");
     entry.settled.resolve();
     return "withdrawn";
+  }
+
+  // Deleting a message that is still waiting says what Take back says; one already taken up has nothing left to withdraw.
+  async withdrawDeleted(messageId: string): Promise<void> {
+    for (const [sessionId, waiting] of [...this.queued, ...this.folded]) {
+      for (const [uuid, entry] of waiting) {
+        if (entry.sourceMessageId === messageId) {
+          await this.takeBack(sessionId, uuid);
+          return;
+        }
+      }
+    }
   }
 
   // What Send now would throw away, so the press can ask first.
