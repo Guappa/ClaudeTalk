@@ -533,6 +533,80 @@ describe("TurnFlow", () => {
     expect(started).not.toContain("/behind-it");
   });
 
+  it("takes back a message deleted while its clock or its notice is still on the way", async () => {
+    const flow = makeFlow();
+    const letEnd = keepRunning("busy with it");
+    const running = flow.run("s47", cwd, "busy with it", {}, recordingSink(), { resume: true });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const clock = Promise.withResolvers<void>();
+    const posted = Promise.withResolvers<void>();
+    const closed: string[] = [];
+    let marking = false;
+    const sink = {
+      ...quietSink(),
+      ask: async () => {
+        await posted.promise;
+        return { close: async (outcome: string) => void closed.push(outcome) };
+      },
+    };
+    const onState = async (state: string) => {
+      if (state !== "queued") return;
+      marking = true;
+      await clock.promise;
+    };
+    const queued = flow.run("s47", cwd, "/early", {}, sink, { resume: true, onState, sourceMessageId: "m-early" });
+    await vi.waitFor(() => expect(marking).toBe(true));
+    await flow.withdrawDeleted("m-early");
+
+    clock.resolve();
+    posted.resolve();
+    await vi.waitFor(() => expect(closed).toEqual(["Taken back. Claude never saw it."]));
+    letEnd();
+    await running;
+    expect(await queued).toBe(false);
+    expect(started).not.toContain("/early");
+  });
+
+  it("closes a handed-over notice that lands after its message was taken back", async () => {
+    const flow = makeFlow();
+    const letEnd = keepRunning("another job");
+    const running = flow.run("s48", cwd, "another job", {}, recordingSink(), { resume: true });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const posted = Promise.withResolvers<void>();
+    const closed: string[] = [];
+    const sink = {
+      ...quietSink(),
+      ask: async () => {
+        await posted.promise;
+        return { close: async (outcome: string) => void closed.push(outcome) };
+      },
+    };
+    const handed = flow.run("s48", cwd, "second thoughts", {}, sink, { resume: true, foldable: true, sourceMessageId: "m-slow" });
+    await vi.waitFor(() => expect(asked).toContain("handOver second thoughts"));
+    await flow.withdrawDeleted("m-slow");
+    posted.resolve();
+
+    await vi.waitFor(() => expect(closed).toEqual(["Taken back. Claude never saw it."]));
+    expect(await handed).toBe(false);
+    letEnd();
+    await running;
+  });
+
+  it("does not run a message deleted before it reached a turn", async () => {
+    const flow = makeFlow();
+    await flow.withdrawDeleted("m-gone");
+
+    expect(await flow.run("s49", cwd, "too late to say", {}, quietSink(), { resume: true, sourceMessageId: "m-gone" })).toBe(
+      false,
+    );
+    expect(started).not.toContain("too late to say");
+    expect(await flow.run("s49", cwd, "another message", {}, quietSink(), { resume: true, sourceMessageId: "m-other" })).toBe(
+      true,
+    );
+  });
+
   // The button can be pressed in the moment between the notice posting and the bridge holding its handle.
   it("closes a queued notice that lands after its message was already taken back", async () => {
     const flow = makeFlow();

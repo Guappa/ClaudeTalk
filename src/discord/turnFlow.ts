@@ -115,6 +115,8 @@ interface Folded {
   onState?: StateMarker;
   notice: AskHandle | null;
   taken: boolean;
+  // Set when it is taken back while its notice is still on its way, so the notice is closed once it lands.
+  withdrawn: boolean;
   // Set when the turn ended with the message still waiting, so a notice that arrives after that is closed at once.
   missed: boolean;
   settled: PromiseWithResolvers<void>;
@@ -168,6 +170,9 @@ export function describeSendNow(say: Say, outcome: SendNowOutcome): string {
 }
 
 export type TakeBackOutcome = WithdrawOutcome;
+
+// Every deletion anywhere lands here, and only the last few can belong to a message still on its way in.
+const DELETED_REMEMBERED = 64;
 
 const TAKE_BACK_OUTCOMES = {
   withdrawn: "fold.takenBack",
@@ -336,6 +341,8 @@ export class TurnFlow {
   private readonly attention = new Map<string, Attention>();
   private readonly folded = new Map<string, Map<string, Folded>>();
   private readonly queued = new Map<string, Map<string, Queued>>();
+  // A message can be deleted while its attachments download or a terminal is taken over, before it has a place to be taken back from.
+  private readonly deletedEarly = new Set<string>();
   private readonly queue = new TurnQueue();
   private readonly capabilities: CapabilityCache;
   private readonly trackerFor: (sessionId: string) => ContextTracker;
@@ -483,6 +490,7 @@ export class TurnFlow {
       await sink.notice(say("turn.draining"));
       return false;
     }
+    if (options.sourceMessageId && this.deletedEarly.delete(options.sourceMessageId)) return false;
     // A message that joined a turn is done when that turn is: what it brought along is held until then.
     const joined = options.foldable ? await this.fold(sessionId, prompt, sink, options) : null;
     if (joined) {
@@ -523,7 +531,6 @@ export class TurnFlow {
       ticketId,
     );
     if (admission.kind === "queued") {
-      await options.onState?.("queued");
       await this.announceQueued(sessionId, ticketId, admission.ahead, sink, options);
     }
     announced.resolve();
@@ -547,6 +554,7 @@ export class TurnFlow {
     const waiting = this.queued.get(sessionId) ?? new Map<string, Queued>();
     waiting.set(ticketId, entry);
     this.queued.set(sessionId, waiting);
+    await options.onState?.("queued");
     const text = describeQueued(say, ahead);
     if (!sink.ask) {
       await sink.notice(text).catch(() => undefined);
@@ -601,6 +609,7 @@ export class TurnFlow {
       onState: options.onState,
       notice: null,
       taken: false,
+      withdrawn: false,
       missed: false,
       settled: Promise.withResolvers<void>(),
     };
@@ -615,7 +624,8 @@ export class TurnFlow {
     ];
     entry.notice = (await sink.ask?.(say("fold.handedOver"), choices)) ?? null;
     // It can be taken up, or the turn can end, while the notice is still on its way.
-    if (entry.taken) await entry.notice?.close(say("fold.takenUp"));
+    if (entry.withdrawn) await entry.notice?.close(say("fold.takenBack"));
+    else if (entry.taken) await entry.notice?.close(say("fold.takenUp"));
     else if (entry.missed) await entry.notice?.close(say("fold.neverTaken"));
     return entry;
   }
@@ -660,6 +670,7 @@ export class TurnFlow {
     const outcome = await turn.withdraw(uuid);
     // The turn can end while the session is asked, and its ending has then already settled this message.
     if (outcome !== "withdrawn" || !this.folded.get(sessionId)?.delete(uuid)) return outcome;
+    entry.withdrawn = true;
     await entry.notice?.close(this.sayFor(sessionId)("fold.takenBack"));
     await entry.onState?.("stopped");
     entry.settled.resolve();
@@ -676,6 +687,9 @@ export class TurnFlow {
         }
       }
     }
+    this.deletedEarly.add(messageId);
+    const oldest = this.deletedEarly.values().next().value;
+    if (oldest !== undefined && this.deletedEarly.size > DELETED_REMEMBERED) this.deletedEarly.delete(oldest);
   }
 
   // What Send now would throw away, so the press can ask first.
