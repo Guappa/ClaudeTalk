@@ -82,6 +82,8 @@ export const en = {
   },
   outbox: {
     tooLarge: "Too large to attach, left in `{{folder}}`: {{names}}.",
+    withheld:
+      "Not sent, it looks like it holds a secret: {{names}}. Nothing of it was posted, and it is still in `{{folder}}` on the host. Take the secret out and write the file again, or open it on the host.",
     failed:
       "Could not attach what is in `{{folder}}`: {{error}}. The files are still there on the host and the bridge tries again on its own; if it keeps failing, check that the bot may attach files in this channel.",
     files_one: "{{count}} file",

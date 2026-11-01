@@ -74,6 +74,8 @@ export const zh: Catalog = {
   },
   outbox: {
     tooLarge: "太大无法附加，留在了 `{{folder}}` 中：{{names}}。",
+    withheld:
+      "未发送，它看起来包含机密信息：{{names}}。内容没有发布，文件仍在主机的 `{{folder}}` 中。请移除机密后重新写入文件，或在主机上打开它。",
     failed:
       "无法附加 `{{folder}}` 中的内容：{{error}}。文件仍在主机上，桥接会自行重试；如果仍然失败，请检查机器人是否可以在此频道附加文件。",
     files_one: "{{count}} 个文件",

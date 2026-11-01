@@ -4,6 +4,7 @@ import type { Say } from "../i18n/index.ts";
 import { outboxPath, outboxRelative } from "../outboxFolder.ts";
 import { MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_MESSAGE_BYTES } from "./limits.ts";
 import type { SinkFile } from "./messageSink.ts";
+import { fileHoldsSecret } from "./redaction.ts";
 
 export interface OutboxResult {
   files: SinkFile[];
@@ -11,6 +12,10 @@ export interface OutboxResult {
   marks: Map<string, string>;
   // Too large ever to be attached, so they stay where they are.
   skipped: string[];
+  // Text files that hold something that looks like a secret, kept back on the host where nothing has been shown.
+  withheld: string[];
+  // Still being written, so neither sent nor judged yet: one of these already reported stays reported.
+  settling: string[];
   // How many were left for the next message because this one is full.
   deferred: number;
   // Call once the files are delivered; until then they stay on disk and the next sweep retries them. It answers with the names it could not remove.
@@ -23,6 +28,11 @@ type SentAlready = (name: string, mark: string) => boolean;
 export function describeSkipped(say: Say, skipped: string[], sessionId: string): string {
   if (skipped.length === 0) return "";
   return say("outbox.tooLarge", { folder: outboxRelative(sessionId), names: skipped.join(", ") });
+}
+
+export function describeWithheld(say: Say, withheld: string[], sessionId: string): string {
+  if (withheld.length === 0) return "";
+  return say("outbox.withheld", { folder: outboxRelative(sessionId), names: withheld.join(", ") });
 }
 
 // A file still being written must not be sent half-finished, so a sweep waits for it to settle.
@@ -40,12 +50,14 @@ export async function collectOutbox(
   try {
     entries = await fs.readdir(dir);
   } catch {
-    return { files: [], marks: new Map(), skipped: [], deferred: 0, discard: async () => [] };
+    return { files: [], marks: new Map(), skipped: [], withheld: [], settling: [], deferred: 0, discard: async () => [] };
   }
 
   const files: SinkFile[] = [];
   const marks = new Map<string, string>();
   const skipped: string[] = [];
+  const withheld: string[] = [];
+  const settling: string[] = [];
   const collected: string[] = [];
   let bytes = 0;
   let deferred = 0;
@@ -55,7 +67,10 @@ export async function collectOutbox(
     try {
       const stat = await fs.stat(full);
       if (!stat.isFile()) continue;
-      if (minAgeMs > 0 && Date.now() - stat.mtimeMs < minAgeMs) continue;
+      if (minAgeMs > 0 && Date.now() - stat.mtimeMs < minAgeMs) {
+        settling.push(entry);
+        continue;
+      }
 
       const mark = `${stat.size}:${stat.mtimeMs}`;
       // Removing it is tried again, and it takes no place in the message: it is in the channel already.
@@ -73,7 +88,12 @@ export async function collectOutbox(
         continue;
       }
 
-      files.push({ name: entry, data: await fs.readFile(full) });
+      const data = await fs.readFile(full);
+      if (fileHoldsSecret(data)) {
+        withheld.push(entry);
+        continue;
+      }
+      files.push({ name: entry, data });
       marks.set(entry, mark);
       collected.push(full);
       bytes += stat.size;
@@ -89,12 +109,12 @@ export async function collectOutbox(
       await fs.rm(full, { force: true, maxRetries: 5, retryDelay: 200 }).catch(() => void kept.push(path.basename(full)));
     }
     // Leaving empty folders behind litters whatever project the conversation works in.
-    if (skipped.length === 0 && deferred === 0 && kept.length === 0) {
+    if (skipped.length === 0 && withheld.length === 0 && deferred === 0 && kept.length === 0) {
       await fs.rmdir(dir).catch(() => undefined);
       await fs.rmdir(path.dirname(dir)).catch(() => undefined);
     }
     return kept;
   };
 
-  return { files, marks, skipped, deferred, discard };
+  return { files, marks, skipped, withheld, settling, deferred, discard };
 }

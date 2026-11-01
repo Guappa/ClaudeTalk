@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { outboxPath } from "../outboxFolder.ts";
-import { collectOutbox, describeSkipped, type OutboxResult } from "./outbox.ts";
+import { collectOutbox, describeSkipped, describeWithheld, type OutboxResult } from "./outbox.ts";
 import type { MessageSink } from "./messageSink.ts";
 import type { Say } from "../i18n/index.ts";
 
@@ -39,7 +39,7 @@ export class OutboxDelivery {
       batch = await collectOutbox(cwd, sessionId, minAgeMs, sentAlready);
       delivered += await this.sendBatch(say, prefix, batch, sink);
     } while (batch.files.length > 0 && batch.deferred > 0);
-    await this.report(say, sessionId, batch.skipped, sink);
+    await this.report(say, sessionId, batch, sink);
     return delivered;
   }
 
@@ -60,16 +60,17 @@ export class OutboxDelivery {
   }
 
   // A file left behind is named once, not on every sweep until somebody deletes it.
-  private async report(say: Say, sessionId: string, skipped: string[], sink: MessageSink): Promise<void> {
+  private async report(say: Say, sessionId: string, batch: OutboxResult, sink: MessageSink): Promise<void> {
     const prefix = `${sessionId}/`;
-    const still = new Set(skipped.map((name) => prefix + name));
+    const { skipped, withheld, settling } = batch;
+    const still = new Set([...skipped, ...withheld, ...settling].map((name) => prefix + name));
     for (const key of this.reported) {
       if (key.startsWith(prefix) && !still.has(key)) this.reported.delete(key);
     }
-    const fresh = skipped.filter((name) => !this.reported.has(prefix + name));
-    for (const name of fresh) this.reported.add(prefix + name);
+    const fresh = (names: string[]): string[] => names.filter((name) => !this.reported.has(prefix + name));
+    const notes = [describeSkipped(say, fresh(skipped), sessionId), describeWithheld(say, fresh(withheld), sessionId)];
+    for (const name of [...skipped, ...withheld]) this.reported.add(prefix + name);
 
-    const note = describeSkipped(say, fresh, sessionId);
-    if (note) await sink.send(note);
+    for (const note of notes) if (note) await sink.send(note);
   }
 }

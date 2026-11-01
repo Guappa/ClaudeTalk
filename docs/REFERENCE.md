@@ -270,9 +270,23 @@ this machine. Posted there, and kept on Discord's servers under
   Discord, a terminal's prompts and replies included.
 
 Thinking is never posted, nor is what a command prints or a file read returns.
-A secret still reaches the channel when Claude repeats it in a reply, writes it
-into a file or an edit, or sends back a file holding it, so reading one into a
-turn is enough. `/trail hide:edits`, or `hide:all`, keeps diffs and written
+Everything else passes one gate on its way out, which swaps what it recognises
+as a secret for `[redacted]`: the values of the bridge's own environment
+variables named as tokens, keys, secrets or passwords, where the value holds
+both letters and digits; key formats from Anthropic, OpenAI, GitHub, GitLab,
+Google, Slack, Stripe, npm, Hugging Face and Tailscale, AWS access key ids,
+Discord bot tokens and webhook addresses, Slack webhooks and JWTs; private key
+blocks, bearer and basic credentials, passwords in URLs, and long values of
+letters and digits assigned to names like `API_KEY` or `password`. A file in
+the outbox that holds one is not sent at all: the channel says which file, and
+it stays on the host. A file attached in the channel is yours already.
+
+This is a safety net and not a guarantee. It works by shape, so an ordinary
+password, a value in a format it does not know, a key in a table cell, or one
+that is encoded, compressed or split gets through. A secret that gets past it
+reaches the channel when Claude repeats it in a reply, writes
+it into a file or an edit, or sends back a file holding it, so reading one into
+a turn is enough. `/trail hide:edits`, or `hide:all`, keeps diffs and written
 files out of the channel; replies and files sent back are posted whatever it is
 set to.
 

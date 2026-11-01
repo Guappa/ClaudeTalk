@@ -83,6 +83,8 @@ export const sv: Catalog = {
   },
   outbox: {
     tooLarge: "För stora för att bifoga, ligger kvar i `{{folder}}`: {{names}}.",
+    withheld:
+      "Skickades inte, det ser ut att innehålla en hemlighet: {{names}}. Inget av innehållet har postats, och filen ligger kvar i `{{folder}}` på värden. Ta bort hemligheten och skriv filen igen, eller öppna den på värden.",
     failed:
       "Kunde inte bifoga det som ligger i `{{folder}}`: {{error}}. Filerna ligger kvar på värddatorn och bryggan försöker igen av sig själv; om det fortsätter misslyckas, kontrollera att boten får bifoga filer i den här kanalen.",
     files_one: "{{count}} fil",

@@ -84,6 +84,8 @@ export const fr: Catalog = {
   },
   outbox: {
     tooLarge: "Trop volumineux pour être joint, laissé dans `{{folder}}` : {{names}}.",
+    withheld:
+      "Non envoyé, cela semble contenir un secret : {{names}}. Rien n'en a été publié, et le fichier est toujours dans `{{folder}}` sur l'hôte. Retire le secret et réécris le fichier, ou ouvre-le sur l'hôte.",
     failed:
       "Impossible de joindre ce qui se trouve dans `{{folder}}` : {{error}}. Les fichiers sont toujours là sur l'hôte et la passerelle réessaie d'elle-même ; si ça continue d'échouer, vérifie que le bot peut joindre des fichiers dans ce salon.",
     files_one: "{{count}} fichier",

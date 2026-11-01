@@ -13,6 +13,77 @@ import { OUTBOX_DIR, outboxPath } from "../src/outboxFolder.ts";
 
 const say = sayIn("en");
 
+describe("a file holding a secret", () => {
+  // Assembled here so that the source holds no key for a scanner to find.
+  const fakeKey = `${["sk", "ant", "api03"].join("-")}-${"a1b2c3d4".repeat(5)}`;
+
+  async function outboxWith(files: Record<string, string | Buffer>): Promise<{ cwd: string; dir: string }> {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "outbox-secret-"));
+    const dir = outboxPath(cwd, "s1");
+    await fs.mkdir(dir, { recursive: true });
+    for (const [name, content] of Object.entries(files)) await fs.writeFile(path.join(dir, name), content);
+    return { cwd, dir };
+  }
+
+  it("is held back on the host while the files beside it are sent", async () => {
+    const { cwd, dir } = await outboxWith({ "report.md": "all fine", "config.env": `KEY=${fakeKey}\n` });
+    const result = await collectOutbox(cwd, "s1");
+
+    expect(result.files.map((file) => file.name)).toEqual(["report.md"]);
+    expect(result.withheld).toEqual(["config.env"]);
+    await result.discard();
+    expect(await fs.readdir(dir)).toEqual(["config.env"]);
+  });
+
+  it("is named once, and what is posted never carries the secret", async () => {
+    const { cwd } = await outboxWith({ "config.env": `KEY=${fakeKey}\n` });
+    const delivery = new OutboxDelivery();
+    const sink = recordingSink();
+
+    await delivery.deliver(say, cwd, "s1", sink);
+    await delivery.deliver(say, cwd, "s1", sink);
+
+    const notes = sink.messages;
+    const told = notes.filter((note) => note.includes("config.env"));
+    expect(told).toHaveLength(1);
+    expect(told[0]).toContain("looks like it holds a secret");
+    expect(notes.join("\n")).not.toContain(fakeKey);
+  });
+
+  it("reads a UTF-16 file and an archive stored as is, which carry a key in the open", async () => {
+    const { cwd } = await outboxWith({
+      "notes.txt": Buffer.from(`KEY=${fakeKey}`, "utf16le"),
+      "bundle.tar": Buffer.concat([Buffer.alloc(32), Buffer.from(fakeKey), Buffer.alloc(32)]),
+    });
+    const result = await collectOutbox(cwd, "s1");
+
+    expect(result.withheld.sort()).toEqual(["bundle.tar", "notes.txt"]);
+    expect(result.files).toEqual([]);
+  });
+
+  it("sends a binary file with nothing to find in it", async () => {
+    const { cwd } = await outboxWith({ "shot.png": Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0xff, 0xfe]) });
+    const result = await collectOutbox(cwd, "s1");
+
+    expect(result.withheld).toEqual([]);
+    expect(result.files.map((file) => file.name)).toEqual(["shot.png"]);
+  });
+
+  // The sweep passes over a file written a moment ago, which must not read as the file having gone.
+  it("stays reported while a sweep passes over it as still being written", async () => {
+    const { cwd, dir } = await outboxWith({ "config.env": `KEY=${fakeKey}\n` });
+    const delivery = new OutboxDelivery();
+    const sink = recordingSink();
+
+    await delivery.deliver(say, cwd, "s1", sink);
+    await fs.utimes(path.join(dir, "config.env"), new Date(), new Date());
+    await delivery.deliver(say, cwd, "s1", sink, 60_000);
+    await delivery.deliver(say, cwd, "s1", sink);
+
+    expect(sink.messages.filter((note) => note.includes("config.env"))).toHaveLength(1);
+  });
+});
+
 describe("the outbox sweep", () => {
   it("delivers for the conversations after one whose delivery fails, and says the failure once", async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "sweep-"));

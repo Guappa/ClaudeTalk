@@ -84,6 +84,8 @@ export const es: Catalog = {
   },
   outbox: {
     tooLarge: "Demasiado grande para adjuntar, dejado en `{{folder}}`: {{names}}.",
+    withheld:
+      "No enviado, parece contener un secreto: {{names}}. No se ha publicado nada de su contenido y sigue en `{{folder}}` en el host. Quita el secreto y vuelve a escribir el archivo, o ábrelo en el host.",
     failed:
       "No se pudo adjuntar lo que hay en `{{folder}}`: {{error}}. Los archivos siguen ahí en el host y el puente vuelve a intentarlo por su cuenta; si sigue fallando, comprueba que el bot pueda adjuntar archivos en este canal.",
     files_one: "{{count}} archivo",

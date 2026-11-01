@@ -392,7 +392,8 @@ a tag publishes it to `ghcr.io` for amd64 and arm64. hadolint lints the
 
 **Every text reaches Discord through `forDiscord` in `outgoing.ts`.** The sink,
 the command replies, notices and the few direct posts all call it, and a style
-test fails any Discord send that does not. It redacts every spelling of a home
+test fails any Discord send that does not. It takes out what `redaction.ts`
+recognises as a secret, redacts every spelling of a home
 path, found by shape and not by any account's name, and runs `defuseStrayMarkup`, which escapes any inline marker
 that would close outside its own stretch of text. Discord closes an open
 backtick, underscore or star at the next matching one anywhere in the message,

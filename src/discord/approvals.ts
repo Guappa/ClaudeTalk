@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { AskedOfOwner } from "../claude/denials.ts";
 import { APPROVAL_REFUSED } from "../claude/prompts.ts";
 import type { ToolDecision } from "../claude/runner.ts";
-import { displayPath, redactHome } from "../displayPath.ts";
+import { displayPath } from "../displayPath.ts";
+import { redacted } from "./outgoing.ts";
 import type { Say } from "../i18n/index.ts";
 import { truncate } from "../text.ts";
 import type { Delivery, MessageSink, SinkAction } from "./messageSink.ts";
@@ -28,7 +29,7 @@ function detail(input: Record<string, unknown>): string {
   const target = input.file_path ?? input.path;
   const other = input.command ?? input.url ?? input.pattern;
   const shown =
-    typeof target === "string" ? displayPath(target) : redactHome(typeof other === "string" ? other : JSON.stringify(input));
+    typeof target === "string" ? displayPath(target) : redacted(typeof other === "string" ? other : JSON.stringify(input));
   return truncate(shown, DETAIL_LIMIT);
 }
 
