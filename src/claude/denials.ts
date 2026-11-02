@@ -164,8 +164,8 @@ const RECURSIVE_DELETE = new RegExp(
 
 // Claude Code's own folder and the bridge's under the temp directory hold what running sessions still need.
 const HELD_IN_TEMP = /^claude/i;
-// What the shell or a PowerShell list would change after this reads the command: a variable, a glob, a substitution, the home folder, a quote inside a word, a second target after a comma.
-const NOT_LITERAL = /[$\x60*?[\]{}~'",]/;
+// What the shell or a PowerShell list would change after this reads the command: a variable, a glob, a substitution, a quote inside a word, a second target after a comma. A tilde is left out: it only means home at the start of a word, and Windows spells its temp folder with one.
+const NOT_LITERAL = /[$\x60*?[\]{}'",]/;
 // Resolving a path takes .. off before any link is followed, so a link ahead of one would land somewhere the check never looks.
 const PARENT_STEP = /(^|[\\/])\.\.([\\/]|$)/;
 
