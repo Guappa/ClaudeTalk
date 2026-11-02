@@ -40,6 +40,7 @@ import { GUILD, OPERATOR, OWNER, STRANGER, testBridge } from "./helpers/bridge.t
 import { fakeChannel, fakeCommand, fakeGuild, fakeMessage, fakePress } from "./helpers/discord.ts";
 import { record } from "./helpers/records.ts";
 import { quietSink } from "./helpers/sinks.ts";
+import { channelDeleted } from "../src/discord/binding.ts";
 
 interface Asked {
   sessionId: string;
@@ -1409,5 +1410,56 @@ describe("taking a conversation over from a terminal on the host", () => {
     expect(command.replies.at(-1)).toContain("Close that terminal");
     expect(alive(child)).toBe(true);
     child.kill();
+  });
+});
+
+describe("a deleted channel", () => {
+  it("stops its conversation's turn and drops what is queued, then unbinds it", async () => {
+    const bridge = await testBridge();
+    await bridge.store.bindNew({ sessionId: "s-gone", cwd: bridge.config.projectsRoot, channelId: "chan-gone", ownerId: OWNER });
+    const stopped = vi.spyOn(bridge.flow, "stop").mockReturnValue({ stopped: true, dropped: 1 });
+
+    await channelDeleted(bridge, "chan-gone");
+
+    expect(stopped).toHaveBeenCalledWith("s-gone");
+    expect(bridge.store.byChannel("chan-gone")).toBeUndefined();
+  });
+
+  it("ends the conversation's scheduled tasks at once, so resuming it first brings none back", async () => {
+    const bridge = await testBridge();
+    await bridge.store.bindNew({
+      sessionId: "s-tasks",
+      cwd: bridge.config.projectsRoot,
+      channelId: "chan-tasks",
+      ownerId: OWNER,
+    });
+    const forgotten = vi.spyOn(bridge.schedules, "forget");
+
+    await channelDeleted(bridge, "chan-tasks");
+
+    expect(forgotten).toHaveBeenCalledWith("s-tasks");
+  });
+
+  // The branch runs in its source's lane, and what is queued there is the source's own.
+  it("ends only a branch's first turn when the channel made for it goes", async () => {
+    const bridge = await testBridge();
+    bridge.branchChannels.set("chan-branch", "s-source");
+    const stoppedTurn = vi.spyOn(bridge.flow, "stopTurn").mockReturnValue({ stopped: true, queued: 2 });
+    const stopped = vi.spyOn(bridge.flow, "stop");
+
+    await channelDeleted(bridge, "chan-branch");
+
+    expect(stoppedTurn).toHaveBeenCalledWith("s-source");
+    expect(stopped).not.toHaveBeenCalled();
+    expect(bridge.branchChannels.has("chan-branch")).toBe(false);
+  });
+
+  it("stops nothing for a channel no conversation is bound to", async () => {
+    const bridge = await testBridge();
+    const stopped = vi.spyOn(bridge.flow, "stop");
+
+    await channelDeleted(bridge, "chan-other");
+
+    expect(stopped).not.toHaveBeenCalled();
   });
 });

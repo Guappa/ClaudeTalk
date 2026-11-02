@@ -93,6 +93,7 @@ export async function testBridge(records: SessionRecord[] = [], config: Partial<
     questions,
     activeTurns,
     latestPosts: new Map<string, string>(),
+    branchChannels: new Map<string, string>(),
     heldAttachments: new Set<string>(),
     claude: { bundled: "2.1.9", host: "2.1.9", hostIsBundled: false },
     updates,

@@ -876,6 +876,14 @@ so and the button is gone. Five is the ceiling; past that it refuses and points 
 A turn that fails does not block what is queued behind it, and a queued message
 checks for drift only once the turn ahead has ended and been marked seen.
 
+Deleting a conversation's channel or thread stops its turn the way
+`/stop all:true` does and drops what is queued, since nothing could be seen or
+stopped from a channel that is gone. A stop's limits apply: on Windows a shell
+command can outlive it, and nothing can say so with the channel gone, so check
+the host. The conversation stays there with everything up to that point, so
+`/resume` opens it again in a new channel. Deleting the channel made for a
+`/fork` while its first turn runs stops that turn and leaves no branch.
+
 A turn that finds the conversation moved on outside Discord says so and runs.
 What it announced stays owed: `/sync` still shows it after that turn, and any
 turn since, until it has been shown once.

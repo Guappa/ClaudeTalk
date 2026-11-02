@@ -41,6 +41,8 @@ export interface Bridge {
   activeTurns: ActiveTurns;
   // The newest message posted per channel, shared by every sink so the trail knows what sits beneath it.
   latestPosts: Map<string, string>;
+  // A channel made for a branch, by the session it branches from, until the branch's first turn has ended.
+  branchChannels: Map<string, string>;
   // Attachment folders of turns that are still waiting or running, which the sweep leaves alone.
   heldAttachments: Set<string>;
   outbox: OutboxDelivery;
@@ -115,6 +117,7 @@ export async function createBridge(config: Config, supervised: boolean): Promise
     questions,
     activeTurns,
     latestPosts: new Map<string, string>(),
+    branchChannels: new Map<string, string>(),
     heldAttachments: new Set<string>(),
     claude: readClaudeVersions(),
     build: describeBuild(),

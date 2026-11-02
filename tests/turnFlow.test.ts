@@ -607,6 +607,29 @@ describe("TurnFlow", () => {
     );
   });
 
+  // Its channel deleted, the turn has nowhere left to say so, and must still end and free the conversation.
+  it("ends a stopped turn whose every post fails, with what was queued behind it dropped", async () => {
+    const flow = makeFlow();
+    const unknownChannel = async () => {
+      throw new Error("Unknown Channel");
+    };
+    const gone = { ...recordingSink(), notice: unknownChannel, send: unknownChannel, ask: unknownChannel };
+    const letEnd = keepRunning("left running");
+    const running = flow.run("s50", cwd, "left running", {}, gone, { resume: true });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const queued = flow.run("s50", cwd, "/behind", {}, gone, { resume: true });
+    await vi.waitFor(() => expect(flow.queueDepth("s50")).toBe(2));
+
+    expect(flow.stop("s50")).toEqual({ stopped: true, dropped: 1 });
+    expect(asked).toContain("stop left running");
+    letEnd();
+
+    await running;
+    expect(await queued).toBe(false);
+    expect(started).not.toContain("/behind");
+    expect(flow.isRunning("s50")).toBe(false);
+  });
+
   // The button can be pressed in the moment between the notice posting and the bridge holding its handle.
   it("closes a queued notice that lands after its message was already taken back", async () => {
     const flow = makeFlow();
