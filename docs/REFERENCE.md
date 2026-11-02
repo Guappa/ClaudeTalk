@@ -373,7 +373,7 @@ once every link on the way is followed, so a link inside the folder that points
 out of it is a path outside the folder, and one that points at a key is the
 key. None of them says anything of a shell command that reaches the same file.
 The rest read the text of a shell command and catch its obvious forms, no
-more: a recursive delete reaching outside the working directory (`deletes`); a
+more: a recursive delete reaching outside the working directory (`deletes`), apart from a scratch folder named in full below the temp directory, which is a turn's own to clean up: that path has to be spelled out with no variable, glob, quote or `..`, land below temp with every link followed, run without `sudo`, and leave temp itself, the folders Claude Code and the bridge keep there and the working directory alone; a
 force push to `main` or `master`, or deleting that branch (`force-push`), while
 `--force-with-lease` to another branch passes; a download piped straight into a
 shell such as `curl ... | sh` (`download-run`), while a download to a file and

@@ -633,7 +633,10 @@ describe("what a turn is refused outright", () => {
     expect(shell("rm -rf /")).toContain("recursive delete");
     expect(shell("rm -rf ~")).toContain("recursive delete");
     expect(shell("rm -r ../other")).toContain("recursive delete");
-    expect(shell(`rm -rf "${path.join(os.tmpdir(), "elsewhere")}"`)).toContain("recursive delete");
+    expect(shell("rm -rf /srv/elsewhere")).toContain("recursive delete");
+    for (const unknown of [`$${"{"}HOME}/x`, '"$(pwd)"', "$DIR", "\x60pwd\x60"])
+      expect(shell(`rm -rf ${unknown}`), unknown).toContain("recursive delete");
+    expect(shell("rm -rf build/$NAME")).toBeNull();
     expect(shell("Remove-Item -Recurse -Force C:\\")).toContain("recursive delete");
     expect(shell("rm -rf node_modules dist")).toBeNull();
     expect(shell("rm -rf ./build && npm ci")).toBeNull();
@@ -692,8 +695,65 @@ describe("what a turn is refused outright", () => {
   });
 
   // A turn can make a folder anywhere, and a rule that only refused would leave it unable to remove what it made.
+  // A turn's own scratch files are no reach outside the folder, and everything temp shares with others still is.
+  it("lets a recursive delete of a named scratch folder through, and nothing wider", () => {
+    const temp = os.tmpdir();
+    const scratch = path.join(temp, "msgs");
+    expect(shell(`rm -rf ${scratch}`)).toBeNull();
+    expect(shell(`rm -rf "${scratch}" ${path.join(temp, "ci-watch", "logs")}`)).toBeNull();
+    expect(shell(`git add . && rm -rf ${scratch}; echo done`)).toBeNull();
+
+    for (const wider of [
+      temp,
+      `${temp}/`,
+      `${temp}/*`,
+      `${temp}/$NAME`,
+      `"$TMPDIR"`,
+      `${temp}/msg?`,
+      `$(mktemp -d)`,
+      path.join(temp, "claude-1000"),
+      path.join(temp, "claude-1000", "project"),
+      path.join(temp, "claudetalk-attachments-1000"),
+      `${temp}/msgs/../../srv`,
+      `${temp}/link/../projects`,
+      `${temp}/x/'..'/'..'/srv`,
+      `${temp}/x/\\.\\./\\.\\./srv`,
+      `${scratch} \x60pwd\x60`,
+      `${scratch} \\\n/srv/elsewhere`,
+      "~someone",
+      "{/srv/elsewhere,x}",
+    ]) {
+      expect(shell(`rm -rf ${wider}`), wider).toContain("recursive delete");
+    }
+    expect(shell(`sudo rm -rf ${path.join(temp, ".X11-unix")}`)).toContain("recursive delete");
+    expect(shell(`Remove-Item -Recurse -Path ${scratch},/srv/elsewhere`)).toContain("recursive delete");
+  });
+
+  it("reads the folder's own variable as the folder, and backticks that close a command as no target", () => {
+    expect(shell('rm -rf "$PWD/build"')).toBeNull();
+    expect(shell("rm -rf $PWD")).toContain("recursive delete");
+    expect(shell("echo \x60rm -rf build\x60")).toBeNull();
+  });
+
+  it("follows a link in a temp path to where it lands, and keeps a working directory that lives in temp", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "denials-temp-"));
+    const outside = await fs.mkdtemp(path.join(os.homedir(), ".denials-outside-"));
+    await fs.symlink(outside, path.join(root, "link"));
+    const inside = path.join(root, "project");
+    await fs.mkdir(inside);
+    const here = { ...scope, cwd: inside };
+    const denied = (command: string) => deniedBy(all, here, "Bash", { command });
+
+    expect(denied(`rm -rf ${path.join(root, "link", "sub")}`)).toContain("recursive delete");
+    expect(denied(`rm -rf ${root}`)).toContain("recursive delete");
+    expect(denied(`rm -rf ${inside}`)).toContain("recursive delete");
+    expect(denied(`rm -rf ${path.join(root, "beside")}`)).toBeNull();
+    await fs.rm(root, { recursive: true, force: true });
+    await fs.rm(outside, { recursive: true, force: true });
+  });
+
   it("puts a recursive delete outside the folder to an owner, and nothing else, where that rule is on", () => {
-    const outside = path.join(os.tmpdir(), "denials-elsewhere");
+    const outside = "/srv/denials-elsewhere";
     const asked = { rule: "deletes", subject: `rm -rf ${outside}` };
     expect(askedOfOwner(all, scope, "Bash", { command: `rm -rf ${outside}` })).toEqual(asked);
     expect(askedOfOwner(all, scope, "Bash", { command: "rm -rf build" })).toBeNull();
