@@ -172,8 +172,8 @@ const PARENT_STEP = /(^|[\\/])\.\.([\\/]|$)/;
 // A turn's scratch files are its own to clean up, so a path spelled out in full that lands below the temp directory, with every link followed, is no reach outside the folder. Temp itself is shared, and holding the working directory is what the rule is for.
 function throwawayInTemp(target: string, cwd: string): boolean {
   if (!path.isAbsolute(target) || NOT_LITERAL.test(target) || PARENT_STEP.test(target)) return false;
-  // A backslash escapes the next character in a POSIX shell, so the path it spells is not the one written; on Windows it only separates.
-  if (target.startsWith("/") && target.includes("\\")) return false;
+  // A backslash escapes the next character in a POSIX shell and separates on Windows, so a path holding both slashes spells one place to one and another to the other.
+  if (target.includes("/") && target.includes("\\")) return false;
   const temp = landingPath(os.tmpdir());
   const landing = landingPath(target);
   if (!isWithin(temp, landing) || underAny([landing], landingPath(cwd))) return false;
