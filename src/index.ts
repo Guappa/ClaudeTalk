@@ -12,6 +12,7 @@ import { onServerJoined, startUp } from "./discord/startup.ts";
 import { NO_MENTIONS } from "./discord/sink.ts";
 import { describeClaudeVersions } from "./claude/versions.ts";
 import { count } from "./text.ts";
+import { channelDeleted } from "./discord/binding.ts";
 
 const config = loadConfig();
 // The wrappers and the service definitions say so: only then is leaving to be started again more than leaving.
@@ -163,19 +164,14 @@ client.on(Events.MessageDelete, (message) => {
   });
 });
 
-client.on(Events.ChannelDelete, (channel) => {
-  // A voice channel's deletion leaves the conversation bound through its text channel, so only the text channel's is told.
-  const unbinding = bridge.store.byChannel(channel.id);
-  const bound = unbinding?.channels.text === channel.id ? unbinding : undefined;
-  void bridge.store
-    .unbind(channel.id)
-    .then(() => {
-      if (bound) console.log(`Unbound ${bound.sessionId}: its channel was deleted.`);
-    })
-    .catch((error: unknown) => {
-      console.error("failed to unbind deleted channel", error);
-    });
-});
+// A thread a person made can hold a conversation too, and Discord tells of its deletion by an event of its own.
+function onChannelGone(channel: { id: string }): void {
+  channelDeleted(bridge, channel.id).catch((error: unknown) => {
+    console.error("failed to unbind deleted channel", error);
+  });
+}
+client.on(Events.ChannelDelete, onChannelGone);
+client.on(Events.ThreadDelete, onChannelGone);
 
 client.on(Events.InteractionCreate, (interaction) => {
   handleInteraction(bridge, interaction).catch((error: unknown) => {

@@ -21,7 +21,9 @@ export async function runFork(
   name: string,
 ): Promise<ForkOutcome> {
   let forkedId: string | undefined;
+  let channelKept = false;
 
+  bridge.branchChannels.set(channel.id, source.sessionId);
   const ran = await runConversationTurn(bridge, source, {
     prompt: helloToBranch(name),
     sink: channelSink(channel, { latestPosts: bridge.latestPosts }),
@@ -29,9 +31,11 @@ export async function runFork(
     onSessionId: (id) => {
       forkedId = id;
     },
+  }).finally(() => {
+    channelKept = bridge.branchChannels.delete(channel.id);
   });
 
-  if (!ran) return { kind: "not-started" };
+  if (!ran || !channelKept) return { kind: "not-started" };
   if (!forkedId || forkedId === source.sessionId) return { kind: "no-session" };
 
   const branch = await bridge.store.bindNew({
