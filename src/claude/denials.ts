@@ -162,14 +162,42 @@ const RECURSIVE_DELETE = new RegExp(
   "dgim",
 );
 
+// Claude Code's own folder and the bridge's under the temp directory hold what running sessions still need.
+const HELD_IN_TEMP = /^claude/i;
+// What the shell or a PowerShell list would change after this reads the command: a variable, a glob, a substitution, the home folder, a quote inside a word, a second target after a comma.
+const NOT_LITERAL = /[$\x60*?[\]{}~'",]/;
+// Resolving a path takes .. off before any link is followed, so a link ahead of one would land somewhere the check never looks.
+const PARENT_STEP = /(^|[\\/])\.\.([\\/]|$)/;
+
+// A turn's scratch files are its own to clean up, so a path spelled out in full that lands below the temp directory, with every link followed, is no reach outside the folder. Temp itself is shared, and holding the working directory is what the rule is for.
+function throwawayInTemp(target: string, cwd: string): boolean {
+  if (!path.isAbsolute(target) || NOT_LITERAL.test(target) || PARENT_STEP.test(target)) return false;
+  // A backslash escapes the next character in a POSIX shell, so the path it spells is not the one written; on Windows it only separates.
+  if (target.startsWith("/") && target.includes("\\")) return false;
+  const temp = landingPath(os.tmpdir());
+  const landing = landingPath(target);
+  if (!isWithin(temp, landing) || underAny([landing], landingPath(cwd))) return false;
+  return !HELD_IN_TEMP.test(path.relative(temp, landing).split(path.sep)[0] ?? "");
+}
+
 // A recursive delete whose target is the working directory itself or anything outside it.
-function deletesOutside(command: string, cwd: string): boolean {
+function deletesOutside(written: string, cwd: string): boolean {
+  // A line continued with a backslash is one command, and the blank keeps every offset where it was.
+  const command = written.replace(/\\\r?\n/g, (joined) => " ".repeat(joined.length));
   for (const match of blankQuoted(command).matchAll(RECURSIVE_DELETE)) {
+    // Run as root, a delete reaches other accounts' files in temp, which the sticky bit otherwise keeps out of reach.
+    const elevated = /(?<![\w-])sudo\s/.test(match[0]);
     const targets = [...new Set(wordsOf(originalOf(command, match, 1)))].filter((word) => !word.startsWith("-"));
-    for (const target of targets) {
+    // A target's text stops at a backtick, so a word that opens with a substitution leaves nothing to judge.
+    if (/(^|\s)$/.test(originalOf(command, match, 1)) && command[match.indices?.[1]?.[1] ?? -1] === "\x60") return true;
+    for (const named of targets) {
+      // The folder the shell is in, spelled as the variable that holds it.
+      const target = named.replace(/^\$(?:PWD|\{PWD\})(?=\/)/, ".");
       if (/^(\/\*?|[A-Za-z]:[\\/]?\*?|\*|\.\.?|\.\.[\\/].*)$/.test(target)) return true;
+      // Only the shell knows where a target that opens with a variable, a substitution, a home or a brace list lands, and read as a name it would pass for a file in the folder.
+      if (/^[$\x60~{]/.test(target)) return true;
       const resolved = path.resolve(cwd, target.replace(/[\\/]\*$/, ""));
-      if (!isWithin(cwd, resolved)) return true;
+      if (!isWithin(cwd, resolved) && (elevated || !throwawayInTemp(target, cwd))) return true;
     }
   }
   return false;
