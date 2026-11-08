@@ -108,10 +108,17 @@ export function commandsChanged(event: ClaudeEvent): SessionCommand[] | null {
 
 export type AgentOutcome = "completed" | "failed" | "stopped";
 
+// One agent a workflow runs, as its progress reports it; the stream carries none of what that agent says or does.
+export interface WorkflowMember {
+  label: string;
+  phase: string;
+  state: "running" | "done" | "failed" | "stopped";
+}
+
 export type AgentEvent =
   | { kind: "started"; taskId: string; toolUseId: string | null; description: string; agentType: string; remote: boolean }
   | { kind: "background"; taskId: string; toolUseId: string | null }
-  | { kind: "progress"; taskId: string; activity: string; toolUses: number; tokens: number }
+  | { kind: "progress"; taskId: string; activity: string; toolUses: number; tokens: number; members: WorkflowMember[] | null }
   | {
       kind: "ended";
       taskId: string;
@@ -139,13 +146,14 @@ export function agentEvent(event: ClaudeEvent): AgentEvent | null {
   }
   if (event.subtype === "task_started") {
     const remote = fields.task_type === "remote_agent";
-    if (fields.task_type !== "local_agent" && !remote) return null;
+    const workflow = fields.task_type === "local_workflow";
+    if (fields.task_type !== "local_agent" && !remote && !workflow) return null;
     return {
       kind: "started",
       taskId,
       toolUseId: text(fields.tool_use_id) || null,
       description: text(fields.description),
-      agentType: text(fields.subagent_type) || (remote ? "cloud" : "agent"),
+      agentType: workflow ? text(fields.workflow_name) || "workflow" : text(fields.subagent_type) || (remote ? "cloud" : "agent"),
       remote,
     };
   }
@@ -156,6 +164,7 @@ export function agentEvent(event: ClaudeEvent): AgentEvent | null {
       activity: text(fields.description),
       toolUses: usage.tool_uses ?? 0,
       tokens: usage.total_tokens ?? 0,
+      members: workflowMembers(fields.workflow_progress),
     };
   }
   if (event.subtype === "task_notification") {
@@ -170,6 +179,23 @@ export function agentEvent(event: ClaudeEvent): AgentEvent | null {
     };
   }
   return null;
+}
+
+// Undocumented by the SDK, so read leniently: a field it drops or renames costs the roster, never the entry.
+function workflowMembers(progress: unknown): WorkflowMember[] | null {
+  if (!Array.isArray(progress)) return null;
+  const members = new Map<number, WorkflowMember>();
+  for (const entry of progress) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const { type, index, label, phaseTitle, state } = entry as Record<string, unknown>;
+    if (type !== "workflow_agent" || typeof index !== "number") continue;
+    members.set(index, {
+      label: text(label) || `#${index}`,
+      phase: text(phaseTitle),
+      state: state === "done" ? "done" : state === "error" || state === "failed" ? "failed" : "running",
+    });
+  }
+  return [...members.values()];
 }
 
 // The session says when it starts on a message from its input. Replay's echo says so too, but only once the model has spoken, and an older Claude Code sends nothing else.
