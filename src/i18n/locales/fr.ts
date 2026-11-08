@@ -84,6 +84,8 @@ export const fr: Catalog = {
   },
   outbox: {
     tooLarge: "Trop volumineux pour être joint, laissé dans `{{folder}}` : {{names}}.",
+    stray:
+      "Non envoyé, laissé en vrac dans `{{root}}` : {{names}}. Seul le dossier propre à chaque conversation y est envoyé, et celui de celle-ci est `{{folder}}` ; si cette conversation a écrit le fichier, déplace-le là et il partira avec le prochain envoi.",
     withheld:
       "Non envoyé, cela semble contenir un secret : {{names}}. Rien n'en a été publié, et le fichier est toujours dans `{{folder}}` sur l'hôte. Retire le secret et réécris le fichier, ou ouvre-le sur l'hôte.",
     failed:

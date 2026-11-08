@@ -278,6 +278,29 @@ describe("outbox delivery", () => {
     expect(sink.written.filter((line) => line.includes("huge.bin"))).toHaveLength(1);
   });
 
+  it("names a file left loose beside the conversations' folders once per folder, and sends none of it", async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "outbox-loose-"));
+    await fs.mkdir(path.join(cwd, OUTBOX_DIR, "elsewhere"), { recursive: true });
+    await fs.writeFile(path.join(cwd, OUTBOX_DIR, "bundle.zip"), "zipped");
+    await fs.writeFile(path.join(cwd, OUTBOX_DIR, ".gitignore"), "*");
+    const delivery = new OutboxDelivery();
+    const sink = recordingSink();
+
+    expect(await delivery.deliver(say, cwd, "s1", sink)).toBe(0);
+    await delivery.deliver(say, cwd, "s2", sink);
+    const named = sink.written.filter((line) => line.includes("bundle.zip"));
+    expect(named).toHaveLength(1);
+    expect(named[0]).toContain(`${OUTBOX_DIR}/s1/`);
+    expect(sink.written.some((line) => line.includes(".gitignore"))).toBe(false);
+    expect(await fs.readFile(path.join(cwd, OUTBOX_DIR, "bundle.zip"), "utf8")).toBe("zipped");
+
+    await fs.rm(path.join(cwd, OUTBOX_DIR, "bundle.zip"));
+    await delivery.deliver(say, cwd, "s1", sink);
+    await fs.writeFile(path.join(cwd, OUTBOX_DIR, "bundle.zip"), "zipped");
+    await delivery.deliver(say, cwd, "s1", sink);
+    expect(sink.written.filter((line) => line.includes("bundle.zip"))).toHaveLength(2);
+  });
+
   it("names it again if it goes away and comes back", async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "outbox-again-"));
     const big = path.join(outboxPath(cwd, "s1"), "huge.bin");

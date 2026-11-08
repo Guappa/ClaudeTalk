@@ -83,6 +83,8 @@ export const sv: Catalog = {
   },
   outbox: {
     tooLarge: "För stora för att bifoga, ligger kvar i `{{folder}}`: {{names}}.",
+    stray:
+      "Inte skickad, ligger löst i `{{root}}`: {{names}}. Bara en konversations egen mapp där skickas från, och den här konversationens är `{{folder}}`; om den här konversationen skrev filen, flytta den dit så går den iväg med nästa leverans.",
     withheld:
       "Skickades inte, det ser ut att innehålla en hemlighet: {{names}}. Inget av innehållet har postats, och filen ligger kvar i `{{folder}}` på värden. Ta bort hemligheten och skriv filen igen, eller öppna den på värden.",
     failed:

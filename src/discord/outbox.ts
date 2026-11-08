@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Say } from "../i18n/index.ts";
-import { outboxPath, outboxRelative } from "../outboxFolder.ts";
+import { OUTBOX_DIR, outboxPath, outboxRelative } from "../outboxFolder.ts";
 import { MAX_FILE_BYTES, MAX_FILES_PER_MESSAGE, MAX_MESSAGE_BYTES } from "./limits.ts";
 import type { SinkFile } from "./messageSink.ts";
 import { fileHoldsSecret } from "./redaction.ts";
@@ -33,6 +33,31 @@ export function describeSkipped(say: Say, skipped: string[], sessionId: string):
 export function describeWithheld(say: Say, withheld: string[], sessionId: string): string {
   if (withheld.length === 0) return "";
   return say("outbox.withheld", { folder: outboxRelative(sessionId), names: withheld.join(", ") });
+}
+
+export function describeStray(say: Say, stray: string[], sessionId: string): string {
+  if (stray.length === 0) return "";
+  return say("outbox.stray", { root: `${OUTBOX_DIR}/`, folder: outboxRelative(sessionId), names: stray.join(", ") });
+}
+
+// What a folder gathers on its own, and a hidden file such as a .gitignore, is nobody's attempt to send something.
+const NOT_STRAY = /^(?:\..*|Thumbs\.db|desktop\.ini)$/i;
+
+// Files written beside the conversations' folders rather than into one: no conversation may send them, since any in the folder could have.
+export async function strayFiles(cwd: string): Promise<string[]> {
+  const root = path.join(cwd, OUTBOX_DIR);
+  const names = await fs.readdir(root).catch(() => []);
+  const stray: string[] = [];
+  for (const name of names.filter((entry) => !NOT_STRAY.test(entry)).sort()) {
+    if (
+      await fs.stat(path.join(root, name)).then(
+        (stat) => stat.isFile(),
+        () => false,
+      )
+    )
+      stray.push(name);
+  }
+  return stray;
 }
 
 // A file still being written must not be sent half-finished, so a sweep waits for it to settle.

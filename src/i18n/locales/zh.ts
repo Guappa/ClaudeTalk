@@ -74,6 +74,8 @@ export const zh: Catalog = {
   },
   outbox: {
     tooLarge: "太大无法附加，留在了 `{{folder}}` 中：{{names}}。",
+    stray:
+      "未发送，散放在 `{{root}}` 中：{{names}}。只有其中每个对话自己的文件夹会被发送，本对话的是 `{{folder}}`；如果文件是本对话写的，把它移到那里，下次投递时就会发出。",
     withheld:
       "未发送，它看起来包含机密信息：{{names}}。内容没有发布，文件仍在主机的 `{{folder}}` 中。请移除机密后重新写入文件，或在主机上打开它。",
     failed:
