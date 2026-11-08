@@ -729,6 +729,55 @@ describe("what a turn is refused outright", () => {
     expect(shell(`Remove-Item -Recurse -Path ${scratch},/srv/elsewhere`)).toContain("recursive delete");
   });
 
+  it("reads a variable set to a scratch folder just before the delete as that folder, and asks wherever it could hold another", () => {
+    const scratch = path.join(os.tmpdir(), "watch-test");
+    for (const passes of [
+      `set -e; T=${scratch}; rm -rf $T; mkdir -p $T/state`,
+      `T=${scratch}\nrm -rf "$T/state"`,
+      `T=/srv/elsewhere; T=${scratch}; rm -rf $T`,
+      "T=build; rm -rf $T",
+    ]) {
+      expect(shell(passes), passes).toBeNull();
+    }
+    expect(deniedBy(all, scope, "PowerShell", { command: `T=${scratch}; Remove-Item -Recurse $T/srv` })).toContain(
+      "recursive delete",
+    );
+    for (const asks of [
+      `T=/srv/elsewhere; rm -rf $T`,
+      `T=${scratch}; T=$OTHER; rm -rf $T`,
+      `T=${scratch}; T+=/../../srv; rm -rf $T`,
+      `T=${scratch} rm -rf $T`,
+      `false && T=${scratch}; rm -rf $T`,
+      `if false; then T=${scratch}; fi; rm -rf $T`,
+      `(T=${scratch}); rm -rf $T`,
+      `T=${scratch}; read T; rm -rf $T`,
+      `T=${scratch}; export T=/srv; rm -rf $T`,
+      `T=${scratch}; source ./env.sh; rm -rf $T`,
+      `bash -c "T=${scratch}; rm -rf $T"`,
+      `echo T=${scratch}; rm -rf $T`,
+      `T="${scratch}"; rm -rf $T`,
+      `U=${scratch}; rm -rf $T`,
+      `T=; rm -rf $T/`,
+      `T=${scratch}; sudo rm -rf $T`,
+      `IFS=m; T=${scratch}; rm -rf $T`,
+      `T=${scratch}; wait -p T; rm -rf $T`,
+      `_=${scratch}; ls /srv; rm -rf $_`,
+      `OLDPWD=${scratch}; cd /srv; cd /; rm -rf $OLDPWD`,
+      `DIRSTACK=${scratch}; cd /srv; rm -rf $DIRSTACK`,
+      `T=/srv #;T=${scratch}\nrm -rf $T`,
+      `T=${scratch}; wait -n -p T; rm -rf $T/srv`,
+      `BASH_REMATCH=${scratch}; [[ /srv =~ .* ]]; rm -rf $BASH_REMATCH`,
+      `cd /; T=srv; rm -rf $T`,
+      "cd /; rm -rf $PWD/srv",
+      `T=${scratch}/x*; rm -rf $T`,
+      `T=${scratch}; T[0]=/srv; rm -rf $T`,
+      `T=${scratch}; rm -rf $${"{"}T}`,
+      `PWD=/srv/elsewhere; rm -rf $PWD/build`,
+    ]) {
+      expect(shell(asks), asks).toContain("recursive delete");
+    }
+  });
+
   it("reads the folder's own variable as the folder, and backticks that close a command as no target", () => {
     expect(shell('rm -rf "$PWD/build"')).toBeNull();
     expect(shell("rm -rf $PWD")).toContain("recursive delete");

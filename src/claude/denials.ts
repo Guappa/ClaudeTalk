@@ -180,8 +180,27 @@ function throwawayInTemp(target: string, cwd: string): boolean {
   return !HELD_IN_TEMP.test(path.relative(temp, landing).split(path.sep)[0] ?? "");
 }
 
-// A recursive delete whose target is the working directory itself or anything outside it.
-function deletesOutside(written: string, cwd: string): boolean {
+// Before a delete, only these leave a variable holding what was written: a plain assignment, and set with nothing but flags. Anything else could skip one, run it in another shell, or set the variable some other way.
+const PLAIN_ASSIGNMENT = /^([A-Za-z_]\w*)=([\w./+@%:,-]+)$/;
+const SET_FLAGS = /^set(?:\s+(?:[-+][a-zA-Z]+|-o\s+\w+))+$/;
+// Variables the shell itself rewrites as commands run, and IFS, which splits a value into other words.
+const SHELL_KEPT =
+  /^(?:_|IFS|PWD|OLDPWD|DIRSTACK|REPLY|OPTARG|OPTIND|RANDOM|SRANDOM|SECONDS|LINENO|EPOCH\w*|BASH\w*|FUNCNAME|PIPESTATUS|GROUPS|HISTCMD|MAPFILE|COPROC|PPID|UID|EUID|SHLVL|COLUMNS|LINES)$/;
+
+// What each variable holds where everything before the delete is plain assignments and set; null wherever the shell could hold something else, the folder it is in included.
+function plainAssignments(before: string): Map<string, string> | null {
+  const values = new Map<string, string>();
+  for (const statement of before.split(/[;\n]/).map((part) => part.trim())) {
+    if (statement === "" || SET_FLAGS.test(statement)) continue;
+    const assigned = PLAIN_ASSIGNMENT.exec(statement);
+    if (!assigned || SHELL_KEPT.test(assigned[1]!)) return null;
+    values.set(assigned[1]!, assigned[2]!);
+  }
+  return values;
+}
+
+// PowerShell reads NAME=value as a command, not an assignment, so only Bash resolves a variable.
+function deletesOutside(written: string, cwd: string, posix: boolean): boolean {
   // A line continued with a backslash is one command, and the blank keeps every offset where it was.
   const command = written.replace(/\\\r?\n/g, (joined) => " ".repeat(joined.length));
   for (const match of blankQuoted(command).matchAll(RECURSIVE_DELETE)) {
@@ -190,9 +209,16 @@ function deletesOutside(written: string, cwd: string): boolean {
     const targets = [...new Set(wordsOf(originalOf(command, match, 1)))].filter((word) => !word.startsWith("-"));
     // A target's text stops at a backtick, so a word that opens with a substitution leaves nothing to judge.
     if (/(^|\s)$/.test(originalOf(command, match, 1)) && command[match.indices?.[1]?.[1] ?? -1] === "\x60") return true;
+    const assigned = plainAssignments(command.slice(0, match.index));
     for (const named of targets) {
-      // The folder the shell is in, spelled as the variable that holds it.
-      const target = named.replace(/^\$(?:PWD|\{PWD\})(?=\/)/, ".");
+      // A variable set just before, then the folder the shell is in, spelled as the variable that holds it.
+      const target = !assigned
+        ? named
+        : named
+            .replace(/^\$([A-Za-z_]\w*)(?=$|\/)/, (whole, name: string) =>
+              posix && !SHELL_KEPT.test(name) ? (assigned.get(name) ?? whole) : whole,
+            )
+            .replace(/^\$(?:PWD|\{PWD\})(?=\/)/, ".");
       if (/^(\/\*?|[A-Za-z]:[\\/]?\*?|\*|\.\.?|\.\.[\\/].*)$/.test(target)) return true;
       // Only the shell knows where a target that opens with a variable, a substitution, a home or a brace list lands, and read as a name it would pass for a file in the folder.
       if (/^[$\x60~{]/.test(target)) return true;
@@ -277,7 +303,8 @@ export function askedOfOwner(
   input: Record<string, unknown>,
 ): AskedOfOwner | null {
   const command = SHELL_TOOLS.has(toolName) ? text(input.command) : "";
-  if (command && rules.has("deletes") && deletesOutside(command, scope.cwd)) return { rule: "deletes", subject: command };
+  if (command && rules.has("deletes") && deletesOutside(command, scope.cwd, toolName === "Bash"))
+    return { rule: "deletes", subject: command };
   const written = rules.has("writes") ? writesOutside(scope, toolName, input) : null;
   return written ? { rule: "writes", subject: written } : null;
 }
@@ -291,7 +318,7 @@ export function deniedBy(
 ): string | null {
   const command = SHELL_TOOLS.has(toolName) ? text(input.command) : "";
   if (command) {
-    if (rules.has("deletes") && deletesOutside(command, scope.cwd)) return REASONS.deletes;
+    if (rules.has("deletes") && deletesOutside(command, scope.cwd, toolName === "Bash")) return REASONS.deletes;
     if (rules.has("force-push") && forcesMain(blankQuoted(command))) return REASONS["force-push"];
     if (rules.has("download-run") && DOWNLOAD_RUN.test(blankQuoted(command))) return REASONS["download-run"];
     if (rules.has("machine") && MACHINE.test(blankQuoted(command))) return REASONS.machine;
