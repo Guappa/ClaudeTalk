@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentOutcome } from "../claude/events.ts";
+import type { AgentEvent, AgentOutcome, WorkflowMember } from "../claude/events.ts";
 import type { Say } from "../i18n/index.ts";
 import { truncate } from "../text.ts";
 import type { DetailPost, DetailSink, MessageSink } from "./messageSink.ts";
@@ -18,6 +18,9 @@ const ROSTER_DESCRIPTION_CHARS = 100;
 const ROSTER_TYPE_CHARS = 40;
 // Discord allows about five edits in five seconds per channel, and busy agents report far more often than that.
 const PACE_MS = 3000;
+// A workflow can run dozens of agents; the roster names the ones still worth a look and counts the rest.
+const MAX_MEMBERS = 8;
+const MEMBER_CHARS = 60;
 // Discord allows a thread name a hundred characters.
 const TITLE_CHARS = 97;
 
@@ -36,6 +39,15 @@ const ENDED_MARK: Record<AgentOutcome, string> = {
   stopped: "\u{26AA}",
 };
 
+const MEMBER_MARK: Record<WorkflowMember["state"], string> = {
+  running: "\u{23F3}",
+  done: ENDED_MARK.completed,
+  failed: ENDED_MARK.failed,
+  stopped: ENDED_MARK.stopped,
+};
+const MEMBER_ORDER: Record<WorkflowMember["state"], number> = { failed: 0, running: 1, stopped: 2, done: 3 };
+const MEMBER_ENDED: Record<AgentOutcome, WorkflowMember["state"]> = { completed: "done", failed: "failed", stopped: "stopped" };
+
 interface Agent {
   index: number;
   taskId: string;
@@ -52,6 +64,8 @@ interface Agent {
   // What earlier runs added up to, since an agent sent back to work reports its new run from zero.
   earlierToolUses: number;
   earlierMs: number;
+  // Only a workflow has members: the agents its script runs.
+  members: WorkflowMember[];
 }
 
 // Who a turn's agents are and what they are on, kept as a roster in a side room so the trail stays the session's own.
@@ -119,11 +133,13 @@ export class AgentBoard {
       agent.activity = event.activity === agent.description ? "" : event.activity;
       agent.toolUses = agent.earlierToolUses + event.toolUses;
       agent.tokens = event.tokens;
+      if (event.members) agent.members = event.members;
       this.touch(agent);
       return null;
     }
     if (agent.state !== "running") return null;
     agent.state = event.outcome;
+    settleMembers(agent);
     agent.toolUses = event.toolUses === null ? agent.toolUses : agent.earlierToolUses + event.toolUses;
     agent.tokens = event.tokens ?? agent.tokens;
     agent.durationMs = agent.earlierMs + (event.durationMs ?? this.now() - agent.startedAt);
@@ -219,6 +235,7 @@ export class AgentBoard {
     for (const agent of this.agents.values()) {
       if (agent.state !== "running") continue;
       agent.state = "stopped";
+      settleMembers(agent);
       agent.durationMs = agent.earlierMs + this.now() - agent.startedAt;
       this.stale.add(pageOf(agent));
     }
@@ -255,6 +272,7 @@ export class AgentBoard {
       durationMs: 0,
       earlierToolUses: 0,
       earlierMs: 0,
+      members: [],
     };
     this.agents.set(event.taskId, agent);
     if (event.toolUseId) this.byToolUse.set(event.toolUseId, agent);
@@ -318,9 +336,21 @@ export class AgentBoard {
       .filter((agent) => pageOf(agent) === page)
       .map(
         (agent) =>
-          `**${agent.index} · ${truncate(agent.type, ROSTER_TYPE_CHARS)}** · ${truncate(redactSecrets(agent.description), ROSTER_DESCRIPTION_CHARS)}\n${this.standing(agent, false)}`,
+          `**${agent.index} · ${truncate(agent.type, ROSTER_TYPE_CHARS)}** · ${truncate(redactSecrets(agent.description), ROSTER_DESCRIPTION_CHARS)}\n${this.standing(agent, false)}${this.members(agent)}`,
       )
       .join("\n\n");
+  }
+
+  // Failed and running members first, since a finished one needs nothing from a reader.
+  private members(agent: Agent): string {
+    if (agent.members.length === 0) return "";
+    const listed = [...agent.members].sort((first, second) => MEMBER_ORDER[first.state] - MEMBER_ORDER[second.state]);
+    const lines = listed.slice(0, MAX_MEMBERS).map((member) => {
+      const name = truncate(redactSecrets(member.phase ? `${member.label} · ${member.phase}` : member.label), MEMBER_CHARS);
+      return `- ${MEMBER_MARK[member.state]} ${name}`;
+    });
+    if (listed.length > MAX_MEMBERS) lines.push(`- ${this.say("agents.more", { quantity: listed.length - MAX_MEMBERS })}`);
+    return `\n${lines.join("\n")}`;
   }
 
   private line(agent: Agent): string {
@@ -357,6 +387,13 @@ export class AgentBoard {
 export function agentsTitle(say: Say, asked: string): string {
   const line = redactSecrets(asked).replace(/\s+/g, " ").trim();
   return line ? truncate(say("agents.title", { asked: line }), TITLE_CHARS) : say("agents.titleBare");
+}
+
+// A workflow's last report can leave members running that its end stopped, and the roster outlives the turn.
+function settleMembers(agent: Agent): void {
+  if (agent.state === "running") return;
+  const outcome = MEMBER_ENDED[agent.state];
+  agent.members = agent.members.map((member) => (member.state === "running" ? { ...member, state: outcome } : member));
 }
 
 function pageOf(agent: Agent): number {

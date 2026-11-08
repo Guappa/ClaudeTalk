@@ -562,6 +562,14 @@ timed, as the terminal reports one coming back, behind a circle that is green
 for finished, red for failed and white for stopped: 🟢 **reviewer** finished · 2m 10s. A task Claude Code runs in the
 cloud, a cloud review for one, is listed the same way with the type `cloud`.
 
+A workflow (the Workflow tool, `/workflows` in the terminal) is one entry under
+its script's name, and below it the agents the script runs, each with its phase
+and a mark: ⏳ running, 🟢 done, 🔴 failed, ⚪ stopped, failed and running ones first,
+eight at most with the rest counted; one still running when the workflow ends
+takes its mark. Claude Code reports a workflow's agents
+only by name and state, so their own tool calls and reports never reach the
+thread; **Stop agents** stops the workflow as a whole.
+
 While any of them is running the progress message carries a **Stop agents**
 button, or **Stop cloud task** when that is all there is. It stops each one
 through the session, along with any command an agent left running in the

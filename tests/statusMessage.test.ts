@@ -501,6 +501,7 @@ describe("agents in a turn", () => {
       activity: "Reading access.ts",
       toolUses: 3,
       tokens: 33_100,
+      members: null,
     });
     expect(agentEvent(notified("t1", "completed"))).toEqual({
       kind: "ended",
@@ -600,6 +601,88 @@ describe("agents in a turn", () => {
     expect(agents.follows("use1")).toBe(true);
     expect(agents.follows("other")).toBe(false);
     expect(agents.follows(null)).toBe(false);
+  });
+
+  it("follows a workflow as one entry in the side room, naming the agents its script runs", async () => {
+    const workflow = {
+      type: "system",
+      subtype: "task_started",
+      task_id: "w1",
+      tool_use_id: "use9",
+      description: "Check the ledger twice",
+      task_type: "local_workflow",
+      workflow_name: "ledger-pair",
+    } as ClaudeEvent;
+    const member = (index: number, label: string, state: string) => ({
+      type: "workflow_agent",
+      index,
+      label,
+      phaseIndex: 1,
+      phaseTitle: "Check",
+      state,
+    });
+    const progress = {
+      type: "system",
+      subtype: "task_progress",
+      task_id: "w1",
+      description: "Check: totals",
+      usage: { total_tokens: 2400, tool_uses: 0, duration_ms: 900 },
+      workflow_progress: [
+        { type: "workflow_phase", index: 1, title: "Check" },
+        member(1, "totals", "done"),
+        member(2, "dates", "start"),
+        member(3, "names", "error"),
+        member(2, "dates", "start"),
+        "noise",
+      ],
+    } as unknown as ClaudeEvent;
+    expect(agentEvent(workflow)).toMatchObject({ kind: "started", agentType: "ledger-pair", remote: false });
+
+    const sink = recordingSink();
+    const agents = board(sink);
+    feed(agents, workflow, progress);
+    await agents.flush();
+    expect(sink.details).toEqual([
+      "**1 · ledger-pair** · Check the ledger twice\nCheck: totals · 0 tools · 2.4k tokens\n" +
+        "- \u{1F534} names · Check\n- \u{23F3} dates · Check\n- \u{1F7E2} totals · Check",
+    ]);
+    expect(agents.running()).toEqual(["w1"]);
+
+    feed(agents, { type: "system", subtype: "task_notification", task_id: "w1", status: "stopped" } as ClaudeEvent);
+    await agents.flush();
+    expect(sink.details[0]).toContain("- \u{1F534} names · Check\n- \u{26AA} dates · Check\n- \u{1F7E2} totals · Check");
+  });
+
+  it("caps the agents a workflow lists and counts the rest", async () => {
+    const sink = recordingSink();
+    const agents = board(sink);
+    const workflow = {
+      type: "system",
+      subtype: "task_started",
+      task_id: "w2",
+      description: "Fan out",
+      task_type: "local_workflow",
+    };
+    const members = Array.from({ length: 15 }, (_, offset) => ({
+      type: "workflow_agent",
+      index: offset + 1,
+      label: `part ${offset + 1}`,
+      state: "start",
+    }));
+    const progress = {
+      type: "system",
+      subtype: "task_progress",
+      task_id: "w2",
+      description: "",
+      usage: {},
+      workflow_progress: members,
+    };
+    feed(agents, workflow as ClaudeEvent, progress as unknown as ClaudeEvent);
+    await agents.flush();
+    const lines = sink.details[0]!.split("\n");
+    expect(lines[0]).toBe("**1 · workflow** · Fan out");
+    expect(lines.filter((line) => line.startsWith("- \u{23F3}"))).toHaveLength(8);
+    expect(lines.at(-1)).toBe("- and 7 more");
   });
 
   // Each agent can be on something different, so one agent's task would misname the rest.
