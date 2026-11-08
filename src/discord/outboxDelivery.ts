@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { outboxPath } from "../outboxFolder.ts";
-import { collectOutbox, describeSkipped, describeWithheld, type OutboxResult } from "./outbox.ts";
+import { collectOutbox, describeSkipped, describeStray, describeWithheld, strayFiles, type OutboxResult } from "./outbox.ts";
 import type { MessageSink } from "./messageSink.ts";
 import type { Say } from "../i18n/index.ts";
 
@@ -9,6 +9,8 @@ export class OutboxDelivery {
   // Files that were sent and then could not be removed, by conversation and name, with the mark each was sent at.
   private readonly unremoved = new Map<string, string>();
   private readonly inFlight = new Map<string, Promise<number>>();
+  // Loose files are named once per folder, by whichever of its conversations ends a turn first.
+  private readonly strayReported = new Set<string>();
 
   async hasFiles(cwd: string, sessionId: string): Promise<boolean> {
     try {
@@ -40,7 +42,26 @@ export class OutboxDelivery {
       delivered += await this.sendBatch(say, prefix, batch, sink);
     } while (batch.files.length > 0 && batch.deferred > 0);
     await this.report(say, sessionId, batch, sink);
+    await this.reportStray(say, cwd, sessionId, sink);
     return delivered;
+  }
+
+  private async reportStray(say: Say, cwd: string, sessionId: string, sink: MessageSink): Promise<void> {
+    const prefix = `${cwd}\0`;
+    const stray = await strayFiles(cwd);
+    for (const key of this.strayReported) {
+      if (key.startsWith(prefix) && !stray.includes(key.slice(prefix.length))) this.strayReported.delete(key);
+    }
+    const fresh = stray.filter((name) => !this.strayReported.has(prefix + name));
+    const note = describeStray(say, fresh, sessionId);
+    // A note that could not be posted is tried again at the next delivery, and costs none of the files already sent.
+    const posted = note
+      ? await sink.send(note).then(
+          () => true,
+          () => false,
+        )
+      : false;
+    if (posted) for (const name of fresh) this.strayReported.add(prefix + name);
   }
 
   // A file held open by something else cannot be removed once it is sent. It is remembered as sent, so that it is not sent again at every sweep and takes no file's place in a later message.

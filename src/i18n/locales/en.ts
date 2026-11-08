@@ -82,6 +82,8 @@ export const en = {
   },
   outbox: {
     tooLarge: "Too large to attach, left in `{{folder}}`: {{names}}.",
+    stray:
+      "Not sent, left loose in `{{root}}`: {{names}}. Only a conversation's own folder in there is sent from, and this one's is `{{folder}}`; if this conversation wrote the file, move it there and it goes out with the next delivery.",
     withheld:
       "Not sent, it looks like it holds a secret: {{names}}. Nothing of it was posted, and it is still in `{{folder}}` on the host. Take the secret out and write the file again, or open it on the host.",
     failed:

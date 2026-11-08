@@ -84,6 +84,8 @@ export const es: Catalog = {
   },
   outbox: {
     tooLarge: "Demasiado grande para adjuntar, dejado en `{{folder}}`: {{names}}.",
+    stray:
+      "No enviado, suelto en `{{root}}`: {{names}}. Solo se envía desde la carpeta propia de cada conversación, y la de esta es `{{folder}}`; si esta conversación escribió el archivo, muévelo ahí y saldrá con el siguiente envío.",
     withheld:
       "No enviado, parece contener un secreto: {{names}}. No se ha publicado nada de su contenido y sigue en `{{folder}}` en el host. Quita el secreto y vuelve a escribir el archivo, o ábrelo en el host.",
     failed:

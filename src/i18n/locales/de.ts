@@ -84,6 +84,8 @@ export const de: Catalog = {
   },
   outbox: {
     tooLarge: "Zu groß zum Anhängen, in `{{folder}}` gelassen: {{names}}.",
+    stray:
+      "Nicht gesendet, lose in `{{root}}` abgelegt: {{names}}. Gesendet wird nur aus dem eigenen Ordner einer Unterhaltung darin, für diese ist es `{{folder}}`; hat diese Unterhaltung die Datei geschrieben, verschiebe sie dorthin, dann geht sie mit der nächsten Zustellung raus.",
     withheld:
       "Nicht gesendet, es sieht aus, als enthielte es ein Geheimnis: {{names}}. Nichts davon wurde gepostet, und es liegt weiter in `{{folder}}` auf dem Host. Entferne das Geheimnis und schreib die Datei neu, oder öffne sie auf dem Host.",
     failed:

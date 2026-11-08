@@ -1036,7 +1036,10 @@ reply and then removed, so a report, chart or diff arrives as a file. The
 folder is per conversation, and the session's own is named in its system note,
 because two conversations can share a working directory and one's files must
 never land in the other's channel; a file dropped at the `.discord-outbox/`
-root belongs to nobody and is left alone. A fork's first turn still writes to
+root belongs to nobody and is left alone, though the next delivery in that folder,
+at a turn's end or a sweep, names it once and says where a conversation's own
+file belongs (hidden files, `Thumbs.db` and `desktop.ini` are not named), since a session that missed
+its folder would otherwise believe the file sent. A fork's first turn still writes to
 the folder of the conversation it came from. A file over 8 MB is left in place
 and named once, not on every sweep. One message carries at most ten files and
 24 MB in all; whatever does not fit goes out in the messages straight after it,
