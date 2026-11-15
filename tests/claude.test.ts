@@ -729,16 +729,25 @@ describe("what a turn is refused outright", () => {
     expect(shell(`Remove-Item -Recurse -Path ${scratch},/srv/elsewhere`)).toContain("recursive delete");
   });
 
-  it("reads a variable set to a scratch folder just before the delete as that folder, and asks wherever it could hold another", () => {
+  // A Windows temp path holds backslashes, which Bash reads as escapes, so it is never a plain value there.
+  it.skipIf(process.platform === "win32")(
+    "reads a variable set to a scratch folder just before the delete as that folder",
+    () => {
+      const scratch = path.join(os.tmpdir(), "watch-test");
+      for (const passes of [
+        `set -e; T=${scratch}; rm -rf $T; mkdir -p $T/state`,
+        `T=${scratch}\nrm -rf "$T/state"`,
+        `T=/srv/elsewhere; T=${scratch}; rm -rf $T`,
+      ]) {
+        expect(shell(passes), passes).toBeNull();
+      }
+    },
+  );
+
+  it("reads a variable set just before the delete, and asks wherever it could hold another", () => {
     const scratch = path.join(os.tmpdir(), "watch-test");
-    for (const passes of [
-      `set -e; T=${scratch}; rm -rf $T; mkdir -p $T/state`,
-      `T=${scratch}\nrm -rf "$T/state"`,
-      `T=/srv/elsewhere; T=${scratch}; rm -rf $T`,
-      "T=build; rm -rf $T",
-    ]) {
-      expect(shell(passes), passes).toBeNull();
-    }
+    expect(shell("T=build; rm -rf $T")).toBeNull();
+    expect(shell("T=C:\\Temp\\scratch; rm -rf $T")).toContain("recursive delete");
     expect(deniedBy(all, scope, "PowerShell", { command: `T=${scratch}; Remove-Item -Recurse $T/srv` })).toContain(
       "recursive delete",
     );
